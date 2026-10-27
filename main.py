@@ -52,9 +52,13 @@ def init_db() -> sqlite3.Connection:
     return conn
 
 
-def record_hash(rec: Record) -> str:
-    raw = f"{rec.name}|{rec.booking_date}|{rec.source_url}".lower().encode("utf-8")
+def _hash(name: str, booking_date: str, source_url: str) -> str:
+    raw = f"{name}|{booking_date}|{source_url}".lower().encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
+
+
+def record_hash(rec: Record) -> str:
+    return _hash(rec.name, rec.booking_date, rec.source_url)
 
 
 def is_seen(conn: sqlite3.Connection, h: str) -> bool:
@@ -79,6 +83,7 @@ def process_city(city: dict, conn: sqlite3.Connection, args, results: dict, erro
     for source in city["sources"]:
         try:
             adapter = get_adapter(source["adapter"], dump_html=args.dump_html)
+            adapter.seen_check = lambda n, d, u: is_seen(conn, _hash(n, d, u))
             records = adapter.fetch(source["url"])
         except Exception as exc:
             log.error("Adapter %s failed: %s", source.get("adapter"), exc)
