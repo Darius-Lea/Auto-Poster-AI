@@ -27,6 +27,7 @@ MAX_AGE_DAYS = int(os.getenv("MAX_AGE_DAYS", "3"))      # only people booked in 
 MAX_PER_RUN = int(os.getenv("MAX_PER_RUN", "10"))       # cap per run so a first run cannot flood
 SKIP_UNDER_18 = os.getenv("SKIP_UNDER_18", "false").lower() == "true"  # default: post everyone on the roster
 NO_CHARGE_TEXT = "Charges not listed at the time"
+MAX_PAGES = int(os.getenv("MAX_PAGES", "150"))            # safety cap on pagination clicks
 
 
 def _parse_date(text: str) -> Optional[date]:
@@ -81,7 +82,7 @@ def parse_detail(html: str) -> dict:
 class AllenSheriffAdapter(ScraperAdapter):
     name = "allen_sheriff"
 
-    def _load_list_html(self, url: str) -> str:
+    def _load_list_html(self, url: str) -> list[str]:
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=True)
             try:
@@ -116,26 +117,49 @@ class AllenSheriffAdapter(ScraperAdapter):
                         page.wait_for_timeout(1000)
                 except Exception:
                     pass
-                html = page.content()
+                # Walk every page of the roster (the site is paginated), collecting rows as we go.
+                htmls = [page.content()]
+                for n in range(MAX_PAGES):
+                    nxt = page.locator("a.paginate_button.next, .paginate_button.next, a.next").first
+                    try:
+                        cls = nxt.get_attribute("class") or ""
+                        if "disabled" in cls or not nxt.is_visible():
+                            break
+                        nxt.click()
+                        page.wait_for_timeout(500)
+                        htmls.append(page.content())
+                    except Exception:
+                        break
+                log.info("Read %d page(s) of the roster", len(htmls))
+                html = htmls
             finally:
                 browser.close()
         if self.dump_html:
             with open("dump_allen_sheriff.html", "w", encoding="utf-8") as fh:
-                fh.write(html)
-            log.info("Dumped raw HTML to dump_allen_sheriff.html")
+                fh.write(html[0])
+            log.info("Dumped raw HTML (first page) to dump_allen_sheriff.html")
         return html
 
     def fetch(self, url: str) -> list[Record]:
         try:
-            html = self._load_list_html(url)
+            pages = self._load_list_html(url)
         except Exception as exc:
             log.error("Failed to load %s: %s", url, exc)
             return []
-        rows = parse_rows(html, url)
+        by_url: dict[str, dict] = {}
+        for html in pages:
+            for r in parse_rows(html, url):
+                by_url[r["detail_url"]] = r
+        rows = list(by_url.values())
+        log.info("%d unique roster row(s) across all pages", len(rows))
         cutoff = date.today() - timedelta(days=MAX_AGE_DAYS)
         rows = [r for r in rows if _parse_date(r["booking_date"]) >= cutoff]
         rows.sort(key=lambda r: _parse_date(r["booking_date"]), reverse=True)
         log.info("%d row(s) booked since %s", len(rows), cutoff)
+        seen = getattr(self, "seen_check", None)
+        if seen:
+            rows = [r for r in rows if not seen(r["name"], r["booking_date"], r["detail_url"])]
+            log.info("%d row(s) not posted yet", len(rows))
 
         records: list[Record] = []
         for r in rows[:MAX_PER_RUN]:
