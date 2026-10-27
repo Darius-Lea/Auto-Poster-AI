@@ -41,14 +41,15 @@ def send_telegram(message: str, image_paths: Optional[list[str]] = None) -> None
             )
     except Exception as exc:
         log.warning("Telegram sendMessage failed: %s", exc)
-    for path in image_paths or []:
+    for item in image_paths or []:
+        path, photo_caption = (item if isinstance(item, (tuple, list)) else (item, ""))
         try:
             with open(path, "rb") as fh:
                 requests.post(
                     f"https://api.telegram.org/bot{token}/sendPhoto",
-                    data={"chat_id": chat},
+                    data={"chat_id": chat, "caption": (photo_caption or "")[:1000]},
                     files={"photo": fh},
-                    timeout=TIMEOUT,
+                    timeout=30,
                 )
         except Exception as exc:
             log.warning("Telegram sendPhoto failed for %s: %s", path, exc)
@@ -60,7 +61,8 @@ def _esc(text: str) -> str:
     return text
 
 
-def send_telegram_summary(city_results: dict, errors: dict, dry_run: bool = False) -> None:
+def send_telegram_summary(city_results: dict, errors: dict, dry_run: bool = False,
+                          photos: Optional[list] = None) -> None:
     """city_results: {city: [ {"name":..., "charge":...}, ... ]}; errors: {city: [str, ...]}."""
     try:
         lines = ["*Auto Post run summary*" if not dry_run else "*[DRY RUN] Auto Post run summary*", ""]
@@ -80,6 +82,6 @@ def send_telegram_summary(city_results: dict, errors: dict, dry_run: bool = Fals
         message = "\n".join(lines)
         if dry_run and not message.startswith("[DRY RUN]"):
             message = "[DRY RUN] " + message
-        send_telegram(message)
+        send_telegram(message, image_paths=photos)
     except Exception as exc:
         log.warning("Telegram summary failed: %s", exc)
