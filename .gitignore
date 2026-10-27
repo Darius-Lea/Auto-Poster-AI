@@ -1,0 +1,10 @@
+.env
+storage_state/*
+!storage_state/.gitkeep
+outbox/*
+!outbox/.gitkeep
+__pycache__/
+*.pyc
+*.db
+*.sqlite
+dump_*.html

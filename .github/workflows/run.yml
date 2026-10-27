@@ -1,0 +1,85 @@
+# Required repository secrets:
+#   GEMINI_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
+#   STORAGE_STATE_B64 (only for PUBLISH_BACKEND=browser),
+#   plus platform credentials as needed: X_USERNAME, X_PASSWORD, FACEBOOK_EMAIL, FACEBOOK_PASSWORD,
+#   META_PAGE_ID, META_PAGE_ACCESS_TOKEN, POSTIZ_BASE_URL, POSTIZ_API_KEY.
+#
+# This repo must be PUBLIC: GitHub Actions minutes are unlimited for public repos,
+# which is what makes a 30-minute schedule free. Private repos have a monthly quota.
+name: Auto Post
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: auto-post
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      PUBLISH_BACKEND: ${{ vars.PUBLISH_BACKEND || 'queue' }}
+      BROWSER_PLATFORM: ${{ vars.BROWSER_PLATFORM || 'x' }}
+      X_USERNAME: ${{ secrets.X_USERNAME }}
+      X_PASSWORD: ${{ secrets.X_PASSWORD }}
+      FACEBOOK_EMAIL: ${{ secrets.FACEBOOK_EMAIL }}
+      FACEBOOK_PASSWORD: ${{ secrets.FACEBOOK_PASSWORD }}
+      META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
+      META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
+      POSTIZ_BASE_URL: ${{ secrets.POSTIZ_BASE_URL }}
+      POSTIZ_API_KEY: ${{ secrets.POSTIZ_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('requirements.txt') }}
+
+      # The runner filesystem is ephemeral, so persist the SQLite dedupe DB between runs.
+      - name: Restore dedupe database
+        uses: actions/cache@v4
+        with:
+          path: autopost.db
+          key: autopost-db-${{ github.run_id }}
+          restore-keys: autopost-db-
+
+      - run: pip install -r requirements.txt
+
+      - run: python -m playwright install --with-deps chromium
+
+      - name: Hydrate storage state
+        env:
+          STORAGE_STATE_B64: ${{ secrets.STORAGE_STATE_B64 }}
+        run: |
+          if [ -n "$STORAGE_STATE_B64" ]; then
+            mkdir -p storage_state
+            echo "$STORAGE_STATE_B64" | base64 -d > storage_state/combined.json
+          fi
+
+      - run: python main.py
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: outbox
+          path: outbox/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          python -c "from core.notify import send_telegram; send_telegram('❌ Auto Post run failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}')"
