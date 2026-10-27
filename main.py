@@ -106,7 +106,7 @@ def process_city(city: dict, conn: sqlite3.Connection, args, results: dict, erro
                     ref = publisher.publish(rec, stamped, cap, city["workspace_key"])
                     if not ref:
                         raise RuntimeError("publish returned no result")
-                results[name].append({"name": rec.name, "charge": rec.charge})
+                results[name].append({"name": rec.name, "charge": rec.charge, "image": stamped, "caption": cap})
             except Exception as exc:
                 log.error("Record %s failed: %s", rec.name, exc)
                 errors[name].append(f"{rec.name}: {exc}")
@@ -148,7 +148,8 @@ def main() -> int:
     conn.close()
 
     errors = {k: v for k, v in errors.items() if v}
-    notify.send_telegram_summary(results, errors, dry_run=args.dry_run)
+    photos = [(i["image"], i["caption"]) for items in results.values() for i in items][:10]
+    notify.send_telegram_summary(results, errors, dry_run=args.dry_run, photos=photos)
     return 0
 
 
