@@ -15,6 +15,27 @@ PANEL_PAD_FRAC = 0.02      # padding inside the dark backing
 PANEL_ALPHA = 165          # 0 = invisible backing, 255 = solid black
 
 
+def _drop_white_background(logo: Image.Image) -> Image.Image:
+    """If the logo has no transparency (e.g. a phone flattened it onto white), turn the
+    near-white background transparent so it doesn't show as a white box."""
+    alpha = logo.getchannel("A")
+    if alpha.getextrema()[0] < 250:      # already has real transparency
+        return logo
+    px = logo.load()
+    w, h = logo.size
+    out = logo.copy()
+    op = out.load()
+    for y in range(h):
+        for x in range(w):
+            r, g, b, _ = px[x, y]
+            lo = min(r, g, b)
+            if lo >= 245:
+                op[x, y] = (r, g, b, 0)
+            elif lo > 215:               # soft edge so the outline isn't jagged
+                op[x, y] = (r, g, b, int(255 * (245 - lo) / 30))
+    return out
+
+
 def _trim(logo: Image.Image) -> Image.Image:
     """Cut away fully transparent margins so the logo can be sized by its visible part."""
     box = logo.getchannel("A").point(lambda a: 255 if a > 8 else 0).getbbox()
@@ -32,7 +53,7 @@ def stamp(image_path: str, logo_path: str, out_path: str,
         return None
     try:
         base = Image.open(image_path).convert("RGBA")
-        logo = _trim(Image.open(logo_path).convert("RGBA"))
+        logo = _trim(_drop_white_background(Image.open(logo_path).convert("RGBA")))
     except Exception as exc:
         log.error("Could not open image/logo: %s", exc)
         return None
