@@ -1,16 +1,22 @@
 # Auto Post
 
-A multi-city, multi-tenant public-records publishing pipeline. It scrapes arrest/most-wanted listings
+A configurable public-records publishing pipeline. It scrapes arrest/most-wanted listings
 from configured sheriff sites, stamps a city logo onto each image, writes a neutral factual caption with
 Google Gemini, publishes through a pluggable backend, and sends a Telegram summary after every run.
-It is designed to run on GitHub Actions every 30 minutes.
+It is designed to run on GitHub Actions four times daily. The current configuration uses
+the Allen County roster for Fort Wayne. Workspaces share runtime credentials; this is not yet a tenant-isolated subscription app.
+
+**Facebook first:** follow [Connect your Facebook Page](docs/FACEBOOK_SETUP.md).
+The workflow now has `check-facebook`, `preview`, and `publish` actions. Start with one
+post, then enable scheduled Facebook runs with `AUTOPOST_ENABLED=true`.
+See the [product roadmap](docs/ROADMAP.md) for the proposed login-based subscription app.
 
 All captions end with: *All individuals are presumed innocent until proven guilty.*
 Review each source's terms of use and your local laws on publishing booking photos before going live.
 
-## $0 setup checklist
+## Local/queue setup checklist
 
-1. Make the repo **public** (Actions minutes are unlimited for public repos).
+1. Choose public or private repository visibility. Standard GitHub-hosted Actions runners for public repositories are generally free; private repositories have plan-dependent allowances. Other services have their own quotas and terms.
 2. Add repository secrets (Settings -> Secrets and variables -> Actions): `GEMINI_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
 3. Put each city's logo PNG in `assets/` (names must match `config/cities.json`).
 4. Enable the workflow (Actions tab -> *Auto Post* -> Enable).
@@ -89,8 +95,13 @@ cp .env.example .env
 python main.py --dry-run
 ```
 
-Flags: `--city`, `--dry-run` (skips publishing; Telegram message is prefixed `[DRY RUN]`), `--dump-html`.
-Deduplication uses SQLite (`autopost.db`, table `seen`); the workflow restores it between runs with a cache.
+Flags: `--city`, `--limit` (default 1), `--dry-run` (skips publishing; Telegram message is prefixed `[DRY RUN]`), `--dump-html`, `--check-facebook` (read-only token identity check), `--deliveries`.
+Deduplication uses SQLite (`autopost.db`, table `deliveries`) per destination, retaining returned post IDs.
+The old `seen` table is preserved but cannot prove delivery to a particular Page; recent records may be eligible on a new destination.
+Do not delete database caches to switch backends. Uncertain uploads stay on hold until reconciled; see the Facebook guide.
+Actions saves the database even after a partial run fails. Caches can still be evicted, so this is best-effort persistence, not a durable production database.
+
+Run regression tests with `python -m unittest discover -s tests -v`. Facebook tests use fake responses; they do not publish to a live Page.
 
 ## Optional: Render (Docker)
 

@@ -28,8 +28,7 @@ class IndianaMostWantedAdapter(ScraperAdapter):
         try:
             html = load_page_html(url, self.WAIT_SELECTOR, dump_path=dump)
         except Exception as exc:
-            log.error("Failed to load %s: %s", url, exc)
-            return []
+            raise RuntimeError(f"Could not load Indiana most-wanted source at {url}: {exc}") from exc
         soup = BeautifulSoup(html, "html.parser")
         records: list[Record] = []
         for card in soup.select(self.CARD_SELECTOR):

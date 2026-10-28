@@ -1,17 +1,23 @@
-# Required repository secrets:
-#   GEMINI_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
-#   STORAGE_STATE_B64 (only for PUBLISH_BACKEND=browser),
-#   plus platform credentials as needed: X_USERNAME, X_PASSWORD, FACEBOOK_EMAIL, FACEBOOK_PASSWORD,
-#   META_PAGE_ID, META_PAGE_ACCESS_TOKEN, POSTIZ_BASE_URL, POSTIZ_API_KEY.
-#
-# This repo must be PUBLIC: GitHub Actions minutes are unlimited for public repos,
-# which is what makes a 30-minute schedule free. Private repos have a monthly quota.
 name: Auto Post
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    # Four runs daily to start. GitHub schedules are best-effort, in UTC.
+    - cron: "17 */6 * * *"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "Preview skips publishing; check-facebook only checks Page identity"
+        type: choice
+        options: [preview, check-facebook, publish]
+        default: preview
+      limit:
+        description: "Maximum records attempted in this run"
+        type: number
+        default: 1
+
+permissions:
+  contents: read
 
 concurrency:
   group: auto-post
@@ -19,16 +25,19 @@ concurrency:
 
 jobs:
   run:
+    # Preserve queue runs; opt in to scheduled Facebook posting after a manual test.
+    if: github.event_name == 'workflow_dispatch' || vars.PUBLISH_BACKEND != 'meta' || vars.AUTOPOST_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.0-flash' }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       PUBLISH_BACKEND: ${{ vars.PUBLISH_BACKEND || 'queue' }}
       BROWSER_PLATFORM: ${{ vars.BROWSER_PLATFORM || 'x' }}
       MAX_AGE_DAYS: ${{ vars.MAX_AGE_DAYS || '3' }}
-      MAX_PER_RUN: ${{ vars.MAX_PER_RUN || '10' }}
+      MAX_PER_RUN: ${{ vars.MAX_PER_RUN || '1' }}
       SKIP_UNDER_18: ${{ vars.SKIP_UNDER_18 || 'false' }}
       X_USERNAME: ${{ secrets.X_USERNAME }}
       X_PASSWORD: ${{ secrets.X_PASSWORD }}
@@ -36,44 +45,63 @@ jobs:
       FACEBOOK_PASSWORD: ${{ secrets.FACEBOOK_PASSWORD }}
       META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
       META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
+      META_GRAPH_VERSION: ${{ vars.META_GRAPH_VERSION || 'v26.0' }}
       POSTIZ_BASE_URL: ${{ secrets.POSTIZ_BASE_URL }}
       POSTIZ_API_KEY: ${{ secrets.POSTIZ_API_KEY }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+      - name: Run regression tests
+        run: python -m unittest discover -s tests -v
       - name: Cache Playwright browsers
+        if: inputs.mode != 'check-facebook'
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('requirements.txt') }}
-
-      # The runner filesystem is ephemeral, so persist the SQLite dedupe DB between runs.
-      - name: Restore dedupe database
-        uses: actions/cache@v4
+      - name: Install Chromium
+        if: inputs.mode != 'check-facebook'
+        run: python -m playwright install --with-deps chromium
+      - name: Restore delivery database
+        id: database
+        uses: actions/cache/restore@v4
         with:
           path: autopost.db
-          key: autopost-db-${{ github.run_id }}
-          restore-keys: autopost-db-
-
-      - run: pip install -r requirements.txt
-
-      - run: python -m playwright install --with-deps chromium
-
+          key: delivery-db-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            delivery-db-
+            autopost-db-
       - name: Hydrate storage state
+        if: inputs.mode != 'check-facebook'
         env:
           STORAGE_STATE_B64: ${{ secrets.STORAGE_STATE_B64 }}
         run: |
           if [ -n "$STORAGE_STATE_B64" ]; then
             mkdir -p storage_state
-            echo "$STORAGE_STATE_B64" | base64 -d > storage_state/combined.json
+            printf '%s' "$STORAGE_STATE_B64" | base64 -d > storage_state/combined.json
           fi
-
-      - run: python main.py
-
+      - name: Run selected action
+        env:
+          RUN_MODE: ${{ inputs.mode || 'publish' }}
+          RUN_LIMIT: ${{ inputs.limit || vars.MAX_PER_RUN || '1' }}
+        run: |
+          case "$RUN_MODE" in
+            check-facebook) python main.py --check-facebook ;;
+            preview) python main.py --dry-run --limit "$RUN_LIMIT" ;;
+            publish) python main.py --limit "$RUN_LIMIT" ;;
+            *) echo "Unknown action" >&2; exit 1 ;;
+          esac
+      # Save successes AND uncertain outcomes even when another record failed.
+      - name: Save delivery database
+        if: always() && steps.database.outcome == 'success' && hashFiles('autopost.db') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: autopost.db
+          key: delivery-db-${{ github.run_id }}-${{ github.run_attempt }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -81,8 +109,3 @@ jobs:
           path: outbox/
           retention-days: 30
           if-no-files-found: ignore
-
-      - name: Notify on failure
-        if: failure()
-        run: |
-          python -c "from core.notify import send_telegram; send_telegram('❌ Auto Post run failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}')"

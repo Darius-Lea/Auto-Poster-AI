@@ -96,7 +96,11 @@ class AllenSheriffAdapter(ScraperAdapter):
                         page.get_by_role("button", name="Search").click()
                         page.wait_for_selector("table tbody tr td img", timeout=20000)
                     except Exception:
-                        log.warning("No rows appeared on %s", url)
+                        # A valid roster can be empty. A login, challenge, or error
+                        # page without the roster table must not look like a quiet run.
+                        if not page.locator("table").count():
+                            raise RuntimeError("Roster table did not appear after loading and searching")
+                        log.info("Roster table present but no image rows appeared on %s", url)
                 # Show as many rows as possible per page (best effort).
                 try:
                     sel = page.locator("select[name$='_length']").first
@@ -141,11 +145,11 @@ class AllenSheriffAdapter(ScraperAdapter):
         return html
 
     def fetch(self, url: str) -> list[Record]:
+        self.errors: list[str] = []
         try:
             pages = self._load_list_html(url)
         except Exception as exc:
-            log.error("Failed to load %s: %s", url, exc)
-            return []
+            raise RuntimeError(f"Could not load Allen Sheriff roster at {url}: {exc}") from exc
         by_url: dict[str, dict] = {}
         for html in pages:
             for r in parse_rows(html, url):
@@ -181,6 +185,8 @@ class AllenSheriffAdapter(ScraperAdapter):
                     image_url=r["image_url"],
                 ))
             except Exception as exc:
-                log.warning("Skipping %s: %s", r.get("name"), exc)
+                message = f"Could not fetch details for {r.get('name')}: {exc}"
+                self.errors.append(message)
+                log.warning(message)
         log.info("Built %d record(s) from %s", len(records), url)
         return records
