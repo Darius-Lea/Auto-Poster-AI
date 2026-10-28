@@ -59,15 +59,16 @@ def _trim(logo: Image.Image) -> Image.Image:
 
 
 def _shadow(logo: Image.Image, radius: int) -> Image.Image:
-    """Dark halo shaped like the logo, so light letters stay readable on any photo."""
-    pad = radius * 4
+    """Soft dark glow behind the solid parts of the logo only. Thin bits (blood splatter,
+    specks) are removed first, so they are not outlined or highlighted."""
+    pad = radius * 5
     canvas = Image.new("L", (logo.width + 2 * pad, logo.height + 2 * pad), 0)
     canvas.paste(logo.getchannel("A"), (pad, pad))
-    grown = canvas.filter(ImageFilter.MaxFilter(2 * max(1, radius // 2) + 1))
-    blurred = grown.filter(ImageFilter.GaussianBlur(radius))
-    blurred = blurred.point(lambda v: min(255, int(v * 1.6)))
+    k = 2 * max(2, radius) + 1
+    core = canvas.filter(ImageFilter.MinFilter(k)).filter(ImageFilter.MaxFilter(k))  # drops specks
+    glow = core.filter(ImageFilter.GaussianBlur(radius * 1.8))
     shadow = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    shadow.putalpha(blurred.point(lambda v: int(v * 0.85)))
+    shadow.putalpha(glow.point(lambda v: int(min(255, v * 1.15) * 0.60)))
     return shadow
 
 
@@ -112,7 +113,7 @@ def stamp(image_path: str, logo_path: str, out_path: str,
 
         radius = max(3, new_w // 90)
         sh = _shadow(logo, radius)
-        base.alpha_composite(sh, (max(0, x - radius * 4), max(0, y - radius * 4 + radius)))
+        base.alpha_composite(sh, (max(0, x - radius * 5), max(0, y - radius * 5 + radius)))
         base.alpha_composite(logo, (x, y))
 
         os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
