@@ -89,16 +89,39 @@ If there are no eligible new records, a run can finish without a post. Currently
 only the Allen County Sheriff roster for Fort Wayne is configured; the
 most-wanted adapter is present but no wanted listing is enabled.
 
-The schedule runs four times daily at 00:17, 06:17, 12:17, and 18:17 UTC. GitHub's
-schedule can be delayed. Keep the initial limit at one and review results before
-increasing it; this is a per-run attempt limit, not a promise about daily volume.
+The schedule runs three times daily around 9:17 a.m., 1:17 p.m., and 7:17 p.m.
+Fort Wayne time, adjusting for daylight saving time. Scheduled runs attempt at
+most one record each. GitHub's schedule can be delayed or skipped; a run can
+also have no eligible candidate, so actual daily volume can be lower. Manual
+publish runs add to this scheduled volume. These are starting times to test,
+not proven optimal times for Facebook's algorithm. After two weeks, compare
+reach and engagement in Meta Business Suite and adjust using your Page's results.
+
+The Allen County adapter now includes every booking date in the current roster,
+with the oldest unposted bookings first. The workflow sets `MAX_AGE_DAYS=0` so
+an old three-day repository variable cannot exclude long-term inmates. The
+roster is refreshed on each run: released people who no longer appear are not
+kept in a stale publishing queue. Missing photos or failed source requests are
+reported and can prevent a record from being published.
+
+With roughly 780 records, three posts daily would require about 260 days before
+accounting for new arrivals and releases. A small daily limit cannot also
+guarantee immediate coverage of the full roster. The initial backfill pace still
+needs to be selected by the owner; the schedule is a starting point, not an
+analytics-driven optimizer.
+
+Manual runs now have a source selector: `booking`, `warrant`, or `all`.
+Only the booking source is configured. Selecting `warrant` currently fails
+clearly rather than claiming a successful empty run. The Indiana Most Wanted
+adapter has unverified selectors; its exact source URL and live parsing need
+verification before it is configured or a warrant schedule is enabled.
 
 ## Delivery history and retries
 
 Do **not** delete database caches to move from Telegram/queue to Facebook. This
 version keeps delivery history separately for each destination, including the
 Facebook Page and workspace. The old global `seen` table is preserved but is not
-imported as Facebook deliveries. Recent records can therefore be candidates
+imported as Facebook deliveries. Current roster records can therefore be candidates
 again after upgrading, even if they were previously queued or sent to Telegram.
 If the old code also posted some of them to Facebook, inspect existing posts
 before enabling the new destination.

@@ -45,7 +45,14 @@ def load_config(path: str) -> list[dict]:
         for s in c["sources"]:
             if "adapter" not in s or "url" not in s:
                 raise ValueError(f"Source missing adapter/url in {c['city']}")
+            if "kind" in s and s["kind"] not in ("booking", "warrant"):
+                raise ValueError(f"Source kind must be booking or warrant in {c['city']}")
     return cities
+
+
+def source_kind(source: dict) -> str:
+    """Classify legacy sources while allowing explicit routing for new adapters."""
+    return source.get("kind", "warrant" if source["adapter"] == "indiana_most_wanted" else "booking")
 
 
 def init_db() -> sqlite3.Connection:
@@ -87,10 +94,15 @@ def process_city(city: dict, conn: sqlite3.Connection, args, results: dict, erro
     destination = publisher.destination(city["workspace_key"])
     limit = getattr(args, "limit", None)
     for source in city["sources"]:
+        selected_kind = getattr(args, "source_type", "all")
+        if selected_kind != "all" and source_kind(source) != selected_kind:
+            continue
         if limit is not None and args.attempted >= limit:
             break
         try:
             adapter = get_adapter(source["adapter"], dump_html=args.dump_html)
+            if limit is not None:
+                adapter.max_per_run = limit - args.attempted
             adapter.seen_check = lambda n, d, u: delivery.blocked(conn, _hash(n, d, u), destination)
             records = adapter.fetch(source["url"])
             errors[name].extend(getattr(adapter, "errors", []))
@@ -157,6 +169,8 @@ def main() -> int:
     setup_logging()
     parser = argparse.ArgumentParser(description="Auto Post pipeline")
     parser.add_argument("--city", help="Only run this city (display name or workspace_key)")
+    parser.add_argument("--source-type", choices=("booking", "warrant", "all"), default="all",
+                        help="Only run booking or warrant sources; default runs all configured sources")
     parser.add_argument("--dry-run", action="store_true", help="Scrape and caption, but do not publish")
     parser.add_argument("--dump-html", action="store_true", help="Save raw page HTML for selector debugging")
     parser.add_argument("--check-facebook", action="store_true", help="Read-only Page token and identity check; does not post")
@@ -207,6 +221,16 @@ def main() -> int:
         if not cities:
             logging.getLogger("main").error("No city matches %r", args.city)
             return 1
+
+    if args.source_type != "all" and not any(
+        source_kind(source) == args.source_type
+        for city in cities for source in city["sources"]
+    ):
+        logging.getLogger("main").error(
+            "No %s source configured for the selected cities; add and verify that source before running it.",
+            args.source_type,
+        )
+        return 1
 
     conn = init_db()
     results: dict = {}

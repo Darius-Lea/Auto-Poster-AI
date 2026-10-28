@@ -3,8 +3,17 @@
 A configurable public-records publishing pipeline. It scrapes arrest/most-wanted listings
 from configured sheriff sites, stamps a city logo onto each image, writes a neutral factual caption with
 Google Gemini, publishes through a pluggable backend, and sends a Telegram summary after every run.
-It is designed to run on GitHub Actions four times daily. The current configuration uses
+It is designed to run on GitHub Actions three times daily, around 9:17 a.m.,
+1:17 p.m., and 7:17 p.m. Fort Wayne time, adjusting for daylight saving time.
+Scheduled runs attempt at most one record each; manual runs can add more. These
+are starting times to test, not a claim about Facebook's optimal posting times.
+The current configuration uses
 the Allen County roster for Fort Wayne. Workspaces share runtime credentials; this is not yet a tenant-isolated subscription app.
+
+The roster scan includes all booking dates and selects the oldest unposted
+current listings first. It does not repost a confirmed delivery to the same
+Page while its delivery history is retained. Warrant source routing is prepared,
+but no warrant website or warrant schedule is enabled until its source is verified.
 
 **Facebook first:** follow [Connect your Facebook Page](docs/FACEBOOK_SETUP.md).
 The workflow now has `check-facebook`, `preview`, and `publish` actions. Start with one

@@ -23,7 +23,7 @@ from adapters.base import Record, ScraperAdapter
 
 log = logging.getLogger("adapters.allen_sheriff")
 
-MAX_AGE_DAYS = int(os.getenv("MAX_AGE_DAYS", "3"))      # only people booked in the last N days
+MAX_AGE_DAYS = int(os.getenv("MAX_AGE_DAYS", "0"))      # 0 includes every current roster booking
 MAX_PER_RUN = int(os.getenv("MAX_PER_RUN", "10"))       # cap per run so a first run cannot flood
 SKIP_UNDER_18 = os.getenv("SKIP_UNDER_18", "false").lower() == "true"  # default: post everyone on the roster
 NO_CHARGE_TEXT = "Charges not listed at the time"
@@ -111,29 +111,47 @@ class AllenSheriffAdapter(ScraperAdapter):
                     page.wait_for_timeout(1000)
                 except Exception:
                     pass
-                # If the oldest bookings are shown first, flip the sort (best effort).
-                try:
-                    dates = [_parse_date(d) for d in page.locator("table tbody tr td:nth-child(4)")
-                             .all_inner_texts()]
-                    dates = [d for d in dates if d]
-                    if len(dates) > 1 and dates[0] < dates[-1]:
-                        page.locator("table thead th", has_text="Booking Date").first.click()
-                        page.wait_for_timeout(1000)
-                except Exception:
-                    pass
                 # Walk every page of the roster (the site is paginated), collecting rows as we go.
+                # Never treat an incomplete or repeated page walk as the complete roster.
+                next_selector = (
+                    "a.paginate_button.next, .paginate_button.next, a.next, "
+                    "button.next, button.dt-paging-button.next"
+                )
+
+                def next_button():
+                    nxt = page.locator(next_selector).first
+                    if not nxt.is_visible():
+                        return None
+                    if ("disabled" in (nxt.get_attribute("class") or "")
+                            or nxt.get_attribute("aria-disabled") == "true"
+                            or nxt.get_attribute("disabled") is not None):
+                        return None
+                    return nxt
+
                 htmls = [page.content()]
-                for n in range(MAX_PAGES):
-                    nxt = page.locator("a.paginate_button.next, .paginate_button.next, a.next").first
-                    try:
-                        cls = nxt.get_attribute("class") or ""
-                        if "disabled" in cls or not nxt.is_visible():
-                            break
-                        nxt.click()
-                        page.wait_for_timeout(500)
-                        htmls.append(page.content())
-                    except Exception:
+                previous = page.locator("table tbody").first.inner_html()
+                visited = {previous}
+                for _ in range(MAX_PAGES):
+                    nxt = next_button()
+                    if nxt is None:
                         break
+                    try:
+                        nxt.click()
+                        page.wait_for_function(
+                            "previous => { const body = document.querySelector('table tbody'); "
+                            "return body && body.querySelector('tr td img') && body.innerHTML !== previous; }",
+                            arg=previous, timeout=20000,
+                        )
+                    except Exception as exc:
+                        raise RuntimeError("Could not advance to the next roster page; roster is incomplete") from exc
+                    previous = page.locator("table tbody").first.inner_html()
+                    if previous in visited:
+                        raise RuntimeError("Roster pagination repeated an earlier page; roster is incomplete")
+                    visited.add(previous)
+                    htmls.append(page.content())
+                else:
+                    if next_button() is not None:
+                        raise RuntimeError(f"Roster exceeds MAX_PAGES={MAX_PAGES} pagination clicks; increase the limit")
                 log.info("Read %d page(s) of the roster", len(htmls))
                 html = htmls
             finally:
@@ -156,17 +174,29 @@ class AllenSheriffAdapter(ScraperAdapter):
                 by_url[r["detail_url"]] = r
         rows = list(by_url.values())
         log.info("%d unique roster row(s) across all pages", len(rows))
-        cutoff = date.today() - timedelta(days=MAX_AGE_DAYS)
-        rows = [r for r in rows if _parse_date(r["booking_date"]) >= cutoff]
-        rows.sort(key=lambda r: _parse_date(r["booking_date"]), reverse=True)
-        log.info("%d row(s) booked since %s", len(rows), cutoff)
+        if MAX_AGE_DAYS < 0:
+            raise ValueError("MAX_AGE_DAYS must be 0 (all current bookings) or a positive number")
+        if MAX_AGE_DAYS:
+            cutoff = date.today() - timedelta(days=MAX_AGE_DAYS)
+            rows = [r for r in rows if _parse_date(r["booking_date"]) >= cutoff]
+            log.info("%d row(s) booked since %s", len(rows), cutoff)
+        else:
+            log.info("All %d current roster row(s) eligible regardless of booking date", len(rows))
+        # Work through the oldest remaining current bookings before new arrivals.
+        # Re-reading the live roster each run avoids queuing people who left it.
+        rows.sort(key=lambda r: (_parse_date(r["booking_date"]), r["detail_url"]))
         seen = getattr(self, "seen_check", None)
         if seen:
             rows = [r for r in rows if not seen(r["name"], r["booking_date"], r["detail_url"])]
             log.info("%d row(s) not posted yet", len(rows))
 
         records: list[Record] = []
-        for r in rows[:MAX_PER_RUN]:
+        record_limit = getattr(self, "max_per_run", MAX_PER_RUN)
+        if record_limit < 1:
+            raise ValueError("The per-run record limit must be positive")
+        for r in rows:
+            if len(records) >= record_limit:
+                break
             try:
                 resp = requests.get(r["detail_url"], headers={"User-Agent": UA}, timeout=30)
                 resp.raise_for_status()

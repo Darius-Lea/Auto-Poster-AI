@@ -48,6 +48,7 @@ class IndianaMostWantedAdapter(ScraperAdapter):
                     booking_date=date_el.get_text(" ", strip=True) if date_el else "listed",
                     source_url=url,
                     image_url=absolute(url, img_el["src"]),
+                    kind="warrant",
                 ))
             except Exception as exc:
                 log.warning("Skipping card due to error: %s", exc)

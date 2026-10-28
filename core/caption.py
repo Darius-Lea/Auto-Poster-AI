@@ -24,11 +24,20 @@ SYSTEM_PROMPT = (
 
 def _fallback(record: Record) -> str:
     age = f", {record.age}," if record.age else ""
+    if record.kind == "warrant":
+        return (
+            f"The source lists {record.name}{age} as wanted in connection with {record.charge}. "
+            f"Source: {record.source_url}. Listing status can change. {DISCLAIMER}"
+        )
     return (f"{record.name}{age} was listed in public records for {record.charge} "
             f"(date: {record.booking_date or 'not stated'}). {DISCLAIMER}")
 
 
 def make_caption(record: Record, city_name: str) -> str:
+    # Keep warrant descriptions literal: a wanted listing does not establish
+    # that the person has been arrested, booked, or convicted.
+    if record.kind == "warrant":
+        return _fallback(record)
     key = os.getenv("GEMINI_API_KEY")
     if not key:
         log.warning("GEMINI_API_KEY not set; using template caption")

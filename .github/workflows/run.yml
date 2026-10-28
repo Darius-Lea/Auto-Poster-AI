@@ -2,8 +2,10 @@ name: Auto Post
 
 on:
   schedule:
-    # Four runs daily to start. GitHub schedules are best-effort, in UTC.
-    - cron: "17 */6 * * *"
+    # 9:17 a.m., 1:17 p.m., 7:17 p.m. Fort Wayne time. The posting_window
+    # job selects the right UTC schedule for daylight or standard time.
+    - cron: "17 13,17,23 * * *"
+    - cron: "17 0,14,18 * * *"
   workflow_dispatch:
     inputs:
       mode:
@@ -15,6 +17,11 @@ on:
         description: "Maximum records attempted in this run"
         type: number
         default: 1
+      source_type:
+        description: "Booking roster or warrants (warrants require a verified configured source)"
+        type: choice
+        options: [booking, warrant, all]
+        default: booking
 
 permissions:
   contents: read
@@ -24,9 +31,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  posting_window:
+    runs-on: ubuntu-24.04
+    outputs:
+      run: ${{ steps.window.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Fort Wayne posting schedule
+        id: window
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+        run: python3 -m core.posting_schedule
   run:
+    needs: posting_window
     # Preserve queue runs; opt in to scheduled Facebook posting after a manual test.
-    if: github.event_name == 'workflow_dispatch' || vars.PUBLISH_BACKEND != 'meta' || vars.AUTOPOST_ENABLED == 'true'
+    if: needs.posting_window.outputs.run == 'true' && (github.event_name == 'workflow_dispatch' || vars.PUBLISH_BACKEND != 'meta' || vars.AUTOPOST_ENABLED == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -36,7 +56,8 @@ jobs:
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       PUBLISH_BACKEND: ${{ vars.PUBLISH_BACKEND || 'queue' }}
       BROWSER_PLATFORM: ${{ vars.BROWSER_PLATFORM || 'x' }}
-      MAX_AGE_DAYS: ${{ vars.MAX_AGE_DAYS || '3' }}
+      # Include all current inmates, even if an old repository variable was set to 3.
+      MAX_AGE_DAYS: '0'
       MAX_PER_RUN: ${{ vars.MAX_PER_RUN || '1' }}
       SKIP_UNDER_18: ${{ vars.SKIP_UNDER_18 || 'false' }}
       X_USERNAME: ${{ secrets.X_USERNAME }}
@@ -87,12 +108,14 @@ jobs:
       - name: Run selected action
         env:
           RUN_MODE: ${{ inputs.mode || 'publish' }}
-          RUN_LIMIT: ${{ inputs.limit || vars.MAX_PER_RUN || '1' }}
+          # Scheduled runs publish at most one record; manual runs use the chosen limit.
+          RUN_LIMIT: ${{ github.event_name == 'schedule' && '1' || inputs.limit || vars.MAX_PER_RUN || '1' }}
+          SOURCE_TYPE: ${{ inputs.source_type || 'booking' }}
         run: |
           case "$RUN_MODE" in
             check-facebook) python main.py --check-facebook ;;
-            preview) python main.py --dry-run --limit "$RUN_LIMIT" ;;
-            publish) python main.py --limit "$RUN_LIMIT" ;;
+            preview) python main.py --dry-run --limit "$RUN_LIMIT" --source-type "$SOURCE_TYPE" ;;
+            publish) python main.py --limit "$RUN_LIMIT" --source-type "$SOURCE_TYPE" ;;
             *) echo "Unknown action" >&2; exit 1 ;;
           esac
       # Save successes AND uncertain outcomes even when another record failed.
