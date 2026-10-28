@@ -15,6 +15,7 @@ from playwright.sync_api import sync_playwright
 
 from adapters.base import Record
 from core import auth
+from core.facebook import FacebookClient, FacebookError
 
 log = logging.getLogger("core.publisher")
 
@@ -88,20 +89,7 @@ def _browser(record: Record, image_path: str, caption: str, workspace_key: str) 
 
 
 def _meta(record: Record, image_path: str, caption: str, workspace_key: str) -> Optional[str]:
-    page_id = os.getenv("META_PAGE_ID")
-    token = os.getenv("META_PAGE_ACCESS_TOKEN")
-    if not (page_id and token):
-        log.error("META_PAGE_ID / META_PAGE_ACCESS_TOKEN not set")
-        return None
-    with open(image_path, "rb") as fh:
-        resp = requests.post(
-            f"https://graph.facebook.com/v19.0/{page_id}/photos",
-            data={"caption": caption, "access_token": token},
-            files={"source": fh},
-            timeout=30,
-        )
-    resp.raise_for_status()
-    return f"meta:{resp.json().get('post_id') or resp.json().get('id')}"
+    return "meta:" + FacebookClient.from_env().publish_photo(image_path, caption)
 
 
 def _postiz(record: Record, image_path: str, caption: str, workspace_key: str) -> Optional[str]:
@@ -129,13 +117,25 @@ def _postiz(record: Record, image_path: str, caption: str, workspace_key: str) -
 BACKENDS = {"queue": _queue, "browser": _browser, "meta": _meta, "postiz": _postiz}
 
 
+def destination(workspace_key: str) -> str:
+    """Delivery identity includes the actual target, never its credentials."""
+    backend = os.getenv("PUBLISH_BACKEND", "queue").lower()
+    if backend not in BACKENDS:
+        raise ValueError(f"Unknown PUBLISH_BACKEND {backend!r}; choose queue, meta, browser, or postiz")
+    if backend == "meta":
+        return f"meta:{FacebookClient.from_env().page_id}:{workspace_key}"
+    if backend == "browser":
+        return f"browser:{os.getenv('BROWSER_PLATFORM', 'x')}:{workspace_key}"
+    if backend == "postiz":
+        return f"postiz:{os.getenv('POSTIZ_BASE_URL', '').rstrip('/')}:{workspace_key}"
+    return f"queue:{workspace_key}"
+
+
 def publish(record: Record, image_path: str, caption: str, workspace_key: str) -> Optional[str]:
-    """Dispatch on PUBLISH_BACKEND. Returns a reference string, or None on failure. Never raises."""
+    """Publish once. Facebook errors propagate with their delivery outcome."""
+    destination(workspace_key)  # Refuse typos instead of silently claiming a queue post succeeded.
     backend = os.getenv("PUBLISH_BACKEND", "queue").lower()
     fn = BACKENDS.get(backend)
-    if not fn:
-        log.error("Unknown PUBLISH_BACKEND %r; falling back to queue", backend)
-        fn, backend = _queue, "queue"
     log.info("Publishing %s via %s", record.name, backend)
     try:
         ref = fn(record, image_path, caption, workspace_key)
@@ -144,6 +144,8 @@ def publish(record: Record, image_path: str, caption: str, workspace_key: str) -
         else:
             log.error("Publish returned nothing for %s via %s", record.name, backend)
         return ref
+    except FacebookError:
+        raise
     except Exception as exc:
         log.error("Publish failed for %s via %s: %s", record.name, backend, exc)
         return None

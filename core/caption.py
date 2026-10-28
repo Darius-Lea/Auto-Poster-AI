@@ -11,7 +11,7 @@ from adapters.base import Record
 log = logging.getLogger("core.caption")
 
 DISCLAIMER = "All individuals are presumed innocent until proven guilty."
-MODEL = "gemini-2.0-flash"
+MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 SYSTEM_PROMPT = (
     "You are a neutral public-records reporter for {city_name}. "
