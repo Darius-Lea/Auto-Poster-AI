@@ -30,6 +30,11 @@ The workflow now has `check-facebook`, `preview`, and `publish` actions. Start w
 post, then enable scheduled Facebook runs with `AUTOPOST_ENABLED=true`.
 See the [product roadmap](docs/ROADMAP.md) for the proposed login-based subscription app.
 
+**Catch up the current jail roster:** use [Booking Catch-Up](docs/BOOKING_CATCHUP.md)
+to publish fresh photos in groups of up to ten, including previously individual
+test bookings. It retains each person's status tracking, then allows the normal
+individual schedule to resume. Keep the delivery caches; do not reset them.
+
 Booking captions include: *All individuals are presumed innocent until proven guilty.*
 Daily roster status notes can follow the original caption.
 Review each source's terms of use and your local laws on publishing booking photos before going live.

@@ -1,0 +1,139 @@
+name: Booking Catch-Up
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Hold the same publishing lock as Auto Post for the ENTIRE catch-up workflow.
+# Each matrix job is sequential and checkpoints the shared delivery database.
+concurrency:
+  group: auto-post
+  cancel-in-progress: false
+
+env:
+  AUTOPOST_DB: autopost.db
+  CATCHUP_WORKSPACE: fort-wayne
+  META_PAGE_ID: ${{ secrets.META_PAGE_ID }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      batches: ${{ steps.plan.outputs.batches }}
+    steps:
+      - name: Prepare bounded catch-up batches
+        id: plan
+        env:
+          SELECTED_REF: ${{ github.ref }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          if os.environ['SELECTED_REF'] != 'refs/heads/main':
+              raise SystemExit('Choose main after merging the update so existing posting history is available.')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as target:
+              target.write('batches=' + json.dumps(list(range(1, 101))) + '\n')
+          PY
+
+  batch:
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      max-parallel: 1
+      fail-fast: true
+      matrix:
+        batch: ${{ fromJSON(needs.plan.outputs.batches) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore confirmed delivery history
+        id: database
+        uses: actions/cache/restore@v4
+        with:
+          path: autopost.db
+          key: delivery-db-${{ github.run_id }}-${{ github.run_attempt }}-catchup-${{ matrix.batch }}
+          restore-keys: |
+            delivery-db-
+            autopost-db-
+      - name: Skip batches after catch-up completes
+        id: pending
+        run: python3 -m core.catchup_runner --inspect-only
+      - uses: actions/setup-python@v5
+        if: steps.pending.outputs.run == 'true'
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install Python dependencies
+        if: steps.pending.outputs.run == 'true'
+        run: pip install -r requirements.txt
+      - name: Run regression tests
+        if: steps.pending.outputs.run == 'true'
+        run: python -m unittest discover -s tests -q
+      - name: Cache Chromium
+        if: steps.pending.outputs.run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('requirements.txt') }}
+      - name: Install Chromium
+        if: steps.pending.outputs.run == 'true'
+        run: python -m playwright install --with-deps chromium
+      - name: Publish one post with up to ten current bookings
+        if: steps.pending.outputs.run == 'true'
+        env:
+          PUBLISH_BACKEND: ${{ vars.PUBLISH_BACKEND || 'queue' }}
+          META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
+          META_GRAPH_VERSION: ${{ vars.META_GRAPH_VERSION || 'v26.0' }}
+          MAX_AGE_DAYS: '0'
+        run: python -m core.catchup_runner
+      - name: Back up this batch even after a partial failure
+        id: backup
+        if: always() && steps.pending.outputs.run == 'true' && steps.database.outcome == 'success' && hashFiles('autopost.db') != ''
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sqlite3
+          Path('checkpoint').mkdir(exist_ok=True)
+          with sqlite3.connect('autopost.db') as source:
+              with sqlite3.connect('checkpoint/autopost.db') as target:
+                  source.backup(target)
+          PY
+      - name: Keep a recovery copy of confirmed Facebook IDs
+        if: always() && steps.backup.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: catchup-history-${{ github.run_attempt }}-${{ matrix.batch }}
+          path: checkpoint/autopost.db
+          retention-days: 30
+          if-no-files-found: error
+      - name: Save this batch even after a partial failure
+        id: checkpoint
+        if: always() && steps.backup.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: autopost.db
+          key: delivery-db-${{ github.run_id }}-${{ github.run_attempt }}-catchup-${{ matrix.batch }}
+      # cache/save can report a warning without failing. Do not let the next
+      # public post proceed unless this exact checkpoint can be found remotely.
+      - name: Verify this batch is available to the next job
+        if: always() && steps.checkpoint.outcome == 'success'
+        uses: actions/cache/restore@v4
+        with:
+          path: autopost.db
+          key: delivery-db-${{ github.run_id }}-${{ github.run_attempt }}-catchup-${{ matrix.batch }}
+          lookup-only: true
+          fail-on-cache-miss: true
+
+  completion:
+    needs: batch
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache/restore@v4
+        with:
+          path: autopost.db
+          key: delivery-db-${{ github.run_id }}-${{ github.run_attempt }}-catchup-final
+          restore-keys: delivery-db-
+      - name: Verify the current roster is covered
+        run: python3 -m core.catchup_runner --verify-complete

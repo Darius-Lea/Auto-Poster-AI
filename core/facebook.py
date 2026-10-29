@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import os
 import re
+import json
+from contextlib import ExitStack
 
 import requests
 
@@ -172,3 +174,78 @@ class FacebookClient:
                 "Check the Page before retrying."
             )
         return reference
+
+    def publish_group(self, items: list[dict], group_caption: str) -> dict:
+        """Publish up to ten individually captioned photos as one Page post.
+
+        All photos are uploaded unpublished before creating the feed post.
+        Failures expose only known photo IDs and the stage for reconciliation;
+        no request is retried and unpublished uploads are never deleted here.
+        """
+        photo_ids: list[str] = []
+        stage = "upload"
+        try:
+            if not isinstance(items, list) or not 1 <= len(items) <= 10:
+                raise FacebookError("A Facebook group must contain between one and ten photos.")
+            if not isinstance(group_caption, str):
+                raise FacebookError("The group caption must be text.")
+            for item in items:
+                if (not isinstance(item, dict)
+                        or not isinstance(item.get("image_path"), (str, os.PathLike))
+                        or not isinstance(item.get("caption"), str)):
+                    raise FacebookError("Each group photo needs an image path and a text caption.")
+            with ExitStack() as stack:
+                try:
+                    # Open every image before uploading any, so a missing later
+                    # file cannot leave a partially uploaded group unnecessarily.
+                    images = [stack.enter_context(open(item["image_path"], "rb")) for item in items]
+                except OSError:
+                    raise FacebookError("Could not open all group images; no upload was attempted.") from None
+                for item, image_file in zip(items, images):
+                    try:
+                        response = requests.post(
+                            self._url + "/photos", headers=self._headers,
+                            data={"caption": item["caption"], "published": "false"},
+                            files={"source": image_file}, timeout=(10, 60),
+                            allow_redirects=False,
+                        )
+                    except requests.RequestException as exc:
+                        raise FacebookDeliveryUnknown(
+                            f"Facebook group photo response was lost ({type(exc).__name__}); "
+                            "reconcile the uploaded photos before retrying."
+                        ) from None
+                    payload = self._decode(response, upload=True)
+                    photo_id = payload.get("id")
+                    if (not isinstance(photo_id, str) or not re.fullmatch(r"[0-9]+", photo_id)
+                            or photo_id in photo_ids):
+                        raise FacebookDeliveryUnknown(
+                            "Facebook did not return a usable unique group photo ID; "
+                            "reconcile the uploaded photos before retrying."
+                        )
+                    photo_ids.append(photo_id)
+                stage = "feed"
+                try:
+                    response = requests.post(
+                        self._url + "/feed", headers=self._headers,
+                        data={"message": group_caption,
+                              "attached_media": json.dumps([{"media_fbid": photo_id} for photo_id in photo_ids])},
+                        timeout=(10, 60), allow_redirects=False,
+                    )
+                except requests.RequestException as exc:
+                    raise FacebookDeliveryUnknown(
+                        f"Facebook group post response was lost ({type(exc).__name__}); "
+                        "check the Page before retrying because the group may already be published."
+                    ) from None
+                payload = self._decode(response, upload=True)
+                post_id = payload.get("id")
+                if (not isinstance(post_id, str)
+                        or not re.fullmatch(re.escape(self.page_id) + r"_[0-9]+", post_id)):
+                    raise FacebookDeliveryUnknown(
+                        "Facebook did not return a usable group post ID for this Page; "
+                        "check the Page before retrying."
+                    )
+                return {"post_id": post_id, "photo_ids": photo_ids}
+        except FacebookError as exc:
+            exc.uploaded_photo_ids = list(photo_ids)
+            exc.stage = stage
+            raise

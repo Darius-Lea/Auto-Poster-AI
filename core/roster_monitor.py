@@ -9,7 +9,7 @@ import sqlite3
 from zoneinfo import ZoneInfo
 
 from adapters.base import get_adapter
-from core import custody
+from core import custody, group_monitor
 
 log = logging.getLogger("core.roster_monitor")
 LOCAL_TIME = ZoneInfo("America/Indiana/Indianapolis")
@@ -97,6 +97,8 @@ def reconcile_city(city: dict, conn: sqlite3.Connection, client, hash_fields,
                     log.warning("%s earlier confirmed posts have no roster/source mapping; "
                                 "they cannot be updated automatically", unmapped)
                 candidates = custody.observe(work, key, set(members), clock)
+                observation = work.execute("SELECT checked_at FROM custody_scans WHERE source_key=?", (key,)).fetchone()
+                accepted = observation and datetime.fromisoformat(observation[0]) == clock.astimezone(timezone.utc)
             except Exception as exc:
                 report["errors"].append(f"{source['adapter']}: {exc}")
                 continue
@@ -121,6 +123,11 @@ def reconcile_city(city: dict, conn: sqlite3.Connection, client, hash_fields,
                              candidate["remote_ref"], candidate["target_status"])
                 except Exception as exc:
                     report["errors"].append(f"Post {candidate['remote_ref']}: {exc}")
+            if not dry_run and accepted:
+                grouped_report = group_monitor.sync(work, client, key, destination, source["url"], clock)
+                report["updated"] += grouped_report["updated"]
+                report["planned"] += grouped_report["updated"]
+                report["errors"].extend(grouped_report["errors"])
         if not supported:
             report["errors"].append("No Allen County roster source configured for daily checks")
     finally:
