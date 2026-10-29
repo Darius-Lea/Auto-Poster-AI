@@ -73,6 +73,10 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(self.conn.execute(
             "SELECT status, remote_ref FROM deliveries WHERE destination = ?", (self.destination,)
         ).fetchone(), ("published", "meta:123_456"))
+        self.assertEqual(self.conn.execute(
+            "SELECT remote_ref, original_caption, source_url FROM custody_posts WHERE destination = ?",
+            (self.destination,),
+        ).fetchone(), ("123_456", "Fixture caption", self.record.source_url))
         results, errors = self.process()
         self.publish.assert_called_once()
         self.assertEqual(results["Fort Wayne"], [])

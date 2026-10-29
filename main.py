@@ -17,7 +17,7 @@ load_dotenv()  # Adapter limits and DB settings are read during module import.
 from adapters._common import download_image
 from adapters.base import Record, get_adapter
 from core import caption as caption_mod
-from core import delivery, notify, publisher, watermark
+from core import custody, delivery, notify, publisher, roster_monitor, watermark
 from core.facebook import FacebookClient, FacebookDeliveryUnknown, FacebookError
 
 DB_PATH = os.getenv("AUTOPOST_DB", "autopost.db")
@@ -45,7 +45,14 @@ def load_config(path: str) -> list[dict]:
         for s in c["sources"]:
             if "adapter" not in s or "url" not in s:
                 raise ValueError(f"Source missing adapter/url in {c['city']}")
+            if "kind" in s and s["kind"] not in ("booking", "warrant"):
+                raise ValueError(f"Source kind must be booking or warrant in {c['city']}")
     return cities
+
+
+def source_kind(source: dict) -> str:
+    """Classify legacy sources while allowing explicit routing for new adapters."""
+    return source.get("kind", "warrant" if source["adapter"] == "indiana_most_wanted" else "booking")
 
 
 def init_db() -> sqlite3.Connection:
@@ -53,6 +60,7 @@ def init_db() -> sqlite3.Connection:
     conn.execute("CREATE TABLE IF NOT EXISTS seen (id_hash TEXT PRIMARY KEY)")
     conn.commit()
     delivery.initialize(conn)
+    custody.initialize(conn)
     return conn
 
 
@@ -87,10 +95,18 @@ def process_city(city: dict, conn: sqlite3.Connection, args, results: dict, erro
     destination = publisher.destination(city["workspace_key"])
     limit = getattr(args, "limit", None)
     for source in city["sources"]:
+        selected_kind = getattr(args, "source_type", "all")
+        if selected_kind != "all" and source_kind(source) != selected_kind:
+            continue
         if limit is not None and args.attempted >= limit:
             break
+        if source_kind(source) == "warrant" and not args.dry_run and source.get("verified") is not True:
+            errors[name].append("Wanted source is not verified; preview and validate its live listings before publishing")
+            continue
         try:
             adapter = get_adapter(source["adapter"], dump_html=args.dump_html)
+            if limit is not None:
+                adapter.max_per_run = limit - args.attempted
             adapter.seen_check = lambda n, d, u: delivery.blocked(conn, _hash(n, d, u), destination)
             records = adapter.fetch(source["url"])
             errors[name].extend(getattr(adapter, "errors", []))
@@ -130,6 +146,9 @@ def process_city(city: dict, conn: sqlite3.Connection, args, results: dict, erro
                         raise RuntimeError("publish returned no result")
                     delivery.complete(conn, h, destination, ref)
                     uploading = False
+                    if destination.startswith("meta:") and source_kind(source) == "booking":
+                        custody.track(conn, h, destination, roster_monitor.source_key(city, source),
+                                      ref, cap, rec.source_url, rec.name)
                     log.info("Delivery confirmed: %s -> %s", h, ref)
                 results[name].append({"name": rec.name, "charge": rec.charge, "image": stamped, "caption": cap})
             except FacebookDeliveryUnknown as exc:
@@ -157,9 +176,12 @@ def main() -> int:
     setup_logging()
     parser = argparse.ArgumentParser(description="Auto Post pipeline")
     parser.add_argument("--city", help="Only run this city (display name or workspace_key)")
+    parser.add_argument("--source-type", choices=("booking", "warrant", "all"), default="all",
+                        help="Only run booking or warrant sources; default runs all configured sources")
     parser.add_argument("--dry-run", action="store_true", help="Scrape and caption, but do not publish")
     parser.add_argument("--dump-html", action="store_true", help="Save raw page HTML for selector debugging")
     parser.add_argument("--check-facebook", action="store_true", help="Read-only Page token and identity check; does not post")
+    parser.add_argument("--check-status", action="store_true", help="Check the current roster and update existing Facebook booking captions; no new posts")
     parser.add_argument("--limit", type=int, default=int(os.getenv("MAX_PER_RUN", "1")), help="Maximum records attempted across the entire run (default: MAX_PER_RUN or 1)")
     parser.add_argument("--deliveries", action="store_true", help="List pending/uncertain deliveries for reconciliation")
     parser.add_argument("--resolve-record", help="Hash of a pending/uncertain delivery to reconcile")
@@ -183,7 +205,10 @@ def main() -> int:
         finally:
             conn.close()
         return 0
-    if args.check_facebook or (not args.dry_run and os.getenv("PUBLISH_BACKEND", "queue").lower() == "meta"):
+    if args.check_status and os.getenv("PUBLISH_BACKEND", "queue").lower() != "meta":
+        logging.getLogger("main").error("Daily status checks require PUBLISH_BACKEND=meta")
+        return 1
+    if args.check_facebook or args.check_status or (not args.dry_run and os.getenv("PUBLISH_BACKEND", "queue").lower() == "meta"):
         try:
             page = FacebookClient.from_env().check_page()
             logging.getLogger("main").info("Facebook Page connected: %s (ID %s). This read check does not test posting permissions.", page.get("name", ""), page["id"])
@@ -208,7 +233,34 @@ def main() -> int:
             logging.getLogger("main").error("No city matches %r", args.city)
             return 1
 
+    if args.source_type != "all" and not any(
+        source_kind(source) == args.source_type
+        for city in cities for source in city["sources"]
+    ):
+        logging.getLogger("main").error(
+            "No %s source configured for the selected cities; add and verify that source before running it.",
+            args.source_type,
+        )
+        return 1
+
     conn = init_db()
+    if args.check_status:
+        failed = False
+        try:
+            client = FacebookClient.from_env()
+            for city in cities:
+                report = roster_monitor.reconcile_city(
+                    city, conn, client, _hash, publisher.destination(city["workspace_key"]),
+                    dry_run=args.dry_run,
+                )
+                logging.getLogger("main").info("[%s] Existing-post status check: %s updated, %s planned",
+                                               city["city"], report["updated"], report["planned"])
+                for error in report["errors"]:
+                    failed = True
+                    logging.getLogger("main").error("[%s] %s", city["city"], error)
+        finally:
+            conn.close()
+        return 1 if failed else 0
     results: dict = {}
     errors: dict = {}
     unresolved = delivery.list_unresolved(conn)

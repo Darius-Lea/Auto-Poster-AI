@@ -30,6 +30,8 @@ class IndianaMostWantedAdapter(ScraperAdapter):
         except Exception as exc:
             raise RuntimeError(f"Could not load Indiana most-wanted source at {url}: {exc}") from exc
         soup = BeautifulSoup(html, "html.parser")
+        if not soup.select(self.CARD_SELECTOR):
+            raise RuntimeError("No supported wanted-listing cards found; verify this site's actual layout before enabling publishing")
         records: list[Record] = []
         for card in soup.select(self.CARD_SELECTOR):
             try:
@@ -48,8 +50,11 @@ class IndianaMostWantedAdapter(ScraperAdapter):
                     booking_date=date_el.get_text(" ", strip=True) if date_el else "listed",
                     source_url=url,
                     image_url=absolute(url, img_el["src"]),
+                    kind="warrant",
                 ))
             except Exception as exc:
                 log.warning("Skipping card due to error: %s", exc)
         log.info("Parsed %d records from %s", len(records), url)
+        if not records:
+            raise RuntimeError("No valid wanted records parsed; source verification is required")
         return records

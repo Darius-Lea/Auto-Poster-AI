@@ -3,15 +3,35 @@
 A configurable public-records publishing pipeline. It scrapes arrest/most-wanted listings
 from configured sheriff sites, stamps a city logo onto each image, writes a neutral factual caption with
 Google Gemini, publishes through a pluggable backend, and sends a Telegram summary after every run.
-It is designed to run on GitHub Actions four times daily. The current configuration uses
+It is designed to run on GitHub Actions three times daily, around 9:17 a.m.,
+1:17 p.m., and 7:17 p.m. Fort Wayne time, adjusting for daylight saving time.
+Scheduled runs attempt at most one record each; manual runs can add more. These
+are starting times to test, not a claim about Facebook's optimal posting times.
+The current configuration uses
 the Allen County roster for Fort Wayne. Workspaces share runtime credentials; this is not yet a tenant-isolated subscription app.
+
+The roster scan includes all booking dates and selects the oldest unposted
+current listings first. It does not repost a confirmed delivery to the same
+Page while its delivery history is retained. The supplied Allen County
+TheMostWanted.net URL is configured for preview. Wanted posting remains blocked
+until its actual page layout is verified; its optional schedule is one post at
+4:17 p.m. Fort Wayne time, separately enabled with `WANTED_ENABLED=true` afterward.
+
+Daily roster checks at about 8:17 a.m. Fort Wayne time update existing Facebook
+booking captions after two complete daily observations show an entry missing.
+Posts and their original booking text are retained; they are not reshared.
+The note says **NO LONGER LISTED IN ALLEN COUNTY JAIL**, because removal from
+the public roster alone does not verify release, transfer, or current location.
+`preview-status` checks without editing; `check-status` applies confirmed caption
+edits. These actions require the Facebook backend and retained delivery database.
 
 **Facebook first:** follow [Connect your Facebook Page](docs/FACEBOOK_SETUP.md).
 The workflow now has `check-facebook`, `preview`, and `publish` actions. Start with one
 post, then enable scheduled Facebook runs with `AUTOPOST_ENABLED=true`.
 See the [product roadmap](docs/ROADMAP.md) for the proposed login-based subscription app.
 
-All captions end with: *All individuals are presumed innocent until proven guilty.*
+Booking captions include: *All individuals are presumed innocent until proven guilty.*
+Daily roster status notes can follow the original caption.
 Review each source's terms of use and your local laws on publishing booking photos before going live.
 
 ## Local/queue setup checklist

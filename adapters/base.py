@@ -18,6 +18,7 @@ class Record:
     source_url: str
     image_url: str
     age: Optional[int] = None
+    kind: str = "booking"
 
 
 class ScraperAdapter(abc.ABC):

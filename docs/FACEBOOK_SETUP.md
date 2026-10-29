@@ -57,6 +57,7 @@ Add these under **Variables**:
 | `MAX_PER_RUN` | `1` |
 | `META_GRAPH_VERSION` | `v26.0`, or a supported version selected for your app |
 | `AUTOPOST_ENABLED` | `false` until your one-post test succeeds |
+| `WANTED_ENABLED` | `false` until the wanted source is verified and its preview succeeds |
 
 `v26.0` is the configurable starting value for the supplied plan, not a claim that
 it is the latest version. Confirm a supported version in Meta's current tools.
@@ -85,20 +86,105 @@ Manual runs are available while `AUTOPOST_ENABLED` is false. Scheduled runs with
 schedules are not affected by this Facebook gate. Set it back to false to pause
 scheduled Facebook publishing while keeping the connection saved.
 
-If there are no eligible new records, a run can finish without a post. Currently
-only the Allen County Sheriff roster for Fort Wayne is configured; the
-most-wanted adapter is present but no wanted listing is enabled.
+If there are no eligible new records, a run can finish without a post. The Allen
+County Sheriff roster is the active booking source. The supplied Allen County
+TheMostWanted.net URL is configured for preview, with publication blocked until
+its actual listings and page layout are verified.
 
-The schedule runs four times daily at 00:17, 06:17, 12:17, and 18:17 UTC. GitHub's
-schedule can be delayed. Keep the initial limit at one and review results before
-increasing it; this is a per-run attempt limit, not a promise about daily volume.
+The schedule runs three times daily around 9:17 a.m., 1:17 p.m., and 7:17 p.m.
+Fort Wayne time, adjusting for daylight saving time. Scheduled runs attempt at
+most one record each. GitHub's schedule can be delayed or skipped; a run can
+also have no eligible candidate, so actual daily volume can be lower. Manual
+publish runs add to this scheduled volume. These are starting times to test,
+not proven optimal times for Facebook's algorithm. After two weeks, compare
+reach and engagement in Meta Business Suite and adjust using your Page's results.
+
+The Allen County adapter now includes every booking date in the current roster,
+with the oldest unposted bookings first. The workflow sets `MAX_AGE_DAYS=0` so
+an old three-day repository variable cannot exclude long-term inmates. The
+roster is refreshed on each run: released people who no longer appear are not
+kept in a stale publishing queue. Missing photos or failed source requests are
+reported and can prevent a record from being published.
+
+With roughly 780 records, three posts daily would require about 260 days before
+accounting for new arrivals and releases. A small daily limit cannot also
+guarantee immediate coverage of the full roster. The initial backfill pace still
+needs to be selected by the owner; the schedule is a starting point, not an
+analytics-driven optimizer.
+
+## Daily roster status updates
+
+Once the updated code is merged and `AUTOPOST_ENABLED=true`, a separate daily
+check runs around 8:17 a.m. Fort Wayne time. It does not publish or reshare
+anything: it checks the full current Allen County roster and edits existing
+Facebook booking captions using their stored Facebook post/photo IDs.
+
+The original booking post, photo, date, caption, and comments remain in place.
+The app adds a dated note **(UPDATE: NO LONGER LISTED IN ALLEN COUNTY JAIL)**
+after two successful daily scans, at least 20 hours apart, show that booking
+missing. This means the public roster no longer lists the booking; it is not
+confirmation of release, freedom, dismissal, or transfer to another facility.
+The app does not automatically assert **RELEASED** from absence alone. If the
+same booking reappears, it removes its own status note and retains the original
+caption. Manual edits to the booking text are preserved when adding/removing
+the managed note.
+
+Empty scans, malformed person rows, incomplete pagination, a mismatch with the
+site's declared roster count, or a roster count falling by more than 20% do not
+trigger disappearance updates. Such runs fail visibly for investigation. A failed
+Facebook edit remains pending for a later daily check. The app verifies that
+the stored post/photo belongs to the configured Page before reading or editing
+its caption; it never deletes or recreates the post.
+
+Use **preview-status** first for a read-only preview. It copies the database to
+memory so it does not advance the saved daily observations or edit Facebook.
+**check-status** applies the daily check and any eligible caption updates. Limit
+is ignored by status checks: all tracked bookings are checked, not just that
+run's publishing limit. GitHub schedules may be delayed or skipped, so this is
+not a real-time custody directory and a note can take more than two days.
+
+New confirmed posts save the source identity, original caption, and returned
+Facebook ID for tracking. Earlier confirmed delivery records can be attached
+when their matching booking is still present on the roster. Older posts without
+a matching receipt or source mapping cannot be inferred or automatically updated.
+The original post already made during setup has no stored caption/source metadata
+in the old schema; the first check attempts to recover it while its booking is
+still listed. Manual Facebook posts are not automatically imported.
+
+No live caption edit was verified during development: cloud credentials and
+source access remain unavailable. Ownership checks and the Graph API's actual
+response must succeed on the live Page. Cache eviction still loses monitoring
+history, so durable storage remains necessary for dependable long-term operation.
+
+## One wanted listing daily
+
+Manual runs have a source selector: `booking`, `warrant`, or `all`. The wanted
+source is `https://www.themostwanted.net/Indiana/Allen/Browse/New`, supplied by
+the owner. Choose **preview** with source **warrant** and limit **1** to inspect
+it without publishing. The current generic selectors are unverified against this
+site. A blocked request, incompatible layout, or zero valid records fails clearly.
+
+After live verification, source-specific parsing tests, and a correct preview,
+the source's `verified` setting in `config/cities.json` can be set to `true`.
+Only then set GitHub Actions variable `WANTED_ENABLED=true`. Scheduled wanted
+runs also require `PUBLISH_BACKEND=meta` and `AUTOPOST_ENABLED=true`. The separate
+slot attempts one wanted post around 4:17 p.m. Fort Wayne time, adjusting for DST.
+It adds to the three booking slots. Wanted captions are labeled **MOST WANTED**,
+link to their source, and do not describe the person as booked or convicted.
+
+Wanted publishing is deliberately inactive while verification is incomplete.
+The current cloud network policy denied the wanted-site request with HTTP 403;
+the saved environment-settings draft adds `www.themostwanted.net` and
+`themostwanted.net`. Review/save that network configuration to allow verification,
+then publish the environment after setup validation. No live wanted-page scrape
+or wanted Facebook post was verified in this development run.
 
 ## Delivery history and retries
 
 Do **not** delete database caches to move from Telegram/queue to Facebook. This
 version keeps delivery history separately for each destination, including the
 Facebook Page and workspace. The old global `seen` table is preserved but is not
-imported as Facebook deliveries. Recent records can therefore be candidates
+imported as Facebook deliveries. Current roster records can therefore be candidates
 again after upgrading, even if they were previously queued or sent to Telegram.
 If the old code also posted some of them to Facebook, inspect existing posts
 before enabling the new destination.
