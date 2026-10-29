@@ -4,7 +4,7 @@ import sqlite3
 import unittest
 from unittest.mock import Mock, patch
 
-from core import custody, delivery
+from core import custody, delivery, grouped, group_monitor
 from core.roster_monitor import STATUS_NOTE, reconcile_city, source_key
 
 
@@ -167,6 +167,72 @@ class RosterMonitorTests(unittest.TestCase):
         self.assertEqual(self.captions['123_456'].count(STATUS_NOTE), 1)
         self.assertEqual(self.client.update_caption.call_count, 1)
         self.assertIs(custody.mark_applied, original_mark)
+
+    def add_group(self):
+        grouped.initialize(self.conn)
+        members = [{
+            'hash': self.person, 'name': self.rows[0]['name'],
+            'booking_date': self.rows[0]['booking_date'],
+            'source_url': self.rows[0]['detail_url'],
+            'image_url': 'https://source.example/photo/0', 'caption': self.original,
+        }]
+        grouped.create(self.conn, 'group-1', self.destination, self.source,
+                       members, 'Original grouped booking text.')
+        grouped.mark_published(self.conn, 'group-1', self.destination, '123_789', ['456'])
+        # Grouped deliveries track the member photo, while the feed post has a
+        # separate caption. This mirrors the catch-up engine's actual ledger.
+        self.conn.execute('UPDATE custody_posts SET remote_ref=? WHERE record_hash=?',
+                          ('456', self.person))
+        self.conn.commit()
+        self.captions['456'] = self.original
+        self.captions['123_789'] = 'Original grouped booking text.'
+
+    def test_grouped_booking_updates_both_photo_and_feed_without_resharing(self):
+        self.add_group()
+        self.prepare_first_absence()
+        report = self.run_day(2, absent=True)
+        self.assertEqual(report, {'updated': 2, 'planned': 2, 'errors': []})
+        self.assertIn(STATUS_NOTE, self.captions['456'])
+        self.assertIn(group_monitor.HEADER, self.captions['123_789'])
+        self.assertIn(self.rows[0]['name'], self.captions['123_789'])
+        self.assertEqual(self.run_day(3, absent=True)['updated'], 0)
+        self.assertEqual(self.run_day(4)['updated'], 2)
+        self.assertEqual(self.captions['456'], self.original)
+        self.assertEqual(self.captions['123_789'], 'Original grouped booking text.')
+        self.client.publish_group.assert_not_called()
+        self.client.publish_photo.assert_not_called()
+        self.client.delete.assert_not_called()
+
+    def test_group_footer_still_updates_if_member_photo_edit_fails(self):
+        self.add_group()
+        self.prepare_first_absence()
+
+        def edit(reference, caption, **kwargs):
+            if reference == '456':
+                raise RuntimeError('Member photo edit rejected')
+            self.apply_caption(reference, caption, **kwargs)
+
+        self.client.update_caption.side_effect = edit
+        report = self.run_day(2, absent=True)
+        self.assertEqual(report['updated'], 1)
+        self.assertTrue(report['errors'])
+        self.assertEqual(self.captions['456'], self.original)
+        self.assertIn(group_monitor.HEADER, self.captions['123_789'])
+        self.client.update_caption.side_effect = self.apply_caption
+        self.assertEqual(self.run_day(3, absent=True)['updated'], 1)
+        self.assertIn(STATUS_NOTE, self.captions['456'])
+
+    def test_preview_or_incomplete_roster_does_not_edit_or_checkpoint_group_status(self):
+        self.add_group()
+        self.prepare_first_absence()
+        before = self.state()
+        self.run_day(2, absent=True, dry_run=True)
+        self.assertEqual(self.state(), before)
+        self.assertEqual(self.captions['123_789'], 'Original grouped booking text.')
+        self.adapter.snapshot_complete = False
+        self.assertTrue(self.run_day(2, absent=True)['errors'])
+        self.assertEqual(self.state(), before)
+        self.client.update_caption.assert_not_called()
 
 
 if __name__ == '__main__':

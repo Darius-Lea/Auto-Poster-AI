@@ -17,7 +17,7 @@ load_dotenv()  # Adapter limits and DB settings are read during module import.
 from adapters._common import download_image
 from adapters.base import Record, get_adapter
 from core import caption as caption_mod
-from core import custody, delivery, notify, publisher, roster_monitor, watermark
+from core import catchup_control, custody, delivery, grouped, notify, publisher, roster_monitor, watermark
 from core.facebook import FacebookClient, FacebookDeliveryUnknown, FacebookError
 
 DB_PATH = os.getenv("AUTOPOST_DB", "autopost.db")
@@ -61,6 +61,8 @@ def init_db() -> sqlite3.Connection:
     conn.commit()
     delivery.initialize(conn)
     custody.initialize(conn)
+    grouped.initialize(conn)
+    catchup_control.initialize(conn)
     return conn
 
 
@@ -261,6 +263,11 @@ def main() -> int:
         finally:
             conn.close()
         return 1 if failed else 0
+    if not args.dry_run and any(catchup_control.blocks_normal(
+            conn, publisher.destination(city["workspace_key"])) for city in cities):
+        logging.getLogger("main").error("Grouped catch-up is active or paused. Finish or reconcile Booking Catch-Up before normal individual posting resumes.")
+        conn.close()
+        return 1
     results: dict = {}
     errors: dict = {}
     unresolved = delivery.list_unresolved(conn)
