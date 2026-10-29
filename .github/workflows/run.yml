@@ -6,12 +6,18 @@ on:
     # job selects the right UTC schedule for daylight or standard time.
     - cron: "17 13,17,23 * * *"
     - cron: "17 0,14,18 * * *"
+    # Daily roster/status check at 8:17 a.m. Fort Wayne time, no new posts.
+    - cron: "17 12 * * *"
+    - cron: "17 13 * * *"
+    # One wanted post at 4:17 p.m., separately gated until the source is verified.
+    - cron: "17 20 * * *"
+    - cron: "17 21 * * *"
   workflow_dispatch:
     inputs:
       mode:
         description: "Preview skips publishing; check-facebook only checks Page identity"
         type: choice
-        options: [preview, check-facebook, publish]
+        options: [preview, check-facebook, publish, preview-status, check-status]
         default: preview
       limit:
         description: "Maximum records attempted in this run"
@@ -35,6 +41,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       run: ${{ steps.window.outputs.run }}
+      mode: ${{ steps.window.outputs.mode }}
     steps:
       - uses: actions/checkout@v4
       - name: Select Fort Wayne posting schedule
@@ -46,8 +53,14 @@ jobs:
   run:
     needs: posting_window
     # Preserve queue runs; opt in to scheduled Facebook posting after a manual test.
-    if: needs.posting_window.outputs.run == 'true' && (github.event_name == 'workflow_dispatch' || vars.PUBLISH_BACKEND != 'meta' || vars.AUTOPOST_ENABLED == 'true')
-    runs-on: ubuntu-latest
+    if: >-
+      needs.posting_window.outputs.run == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (vars.PUBLISH_BACKEND == 'meta' && vars.AUTOPOST_ENABLED == 'true' &&
+        (needs.posting_window.outputs.mode != 'publish-wanted' || vars.WANTED_ENABLED == 'true')) ||
+       (needs.posting_window.outputs.mode == 'publish' && vars.PUBLISH_BACKEND != 'meta'))
+    # Match the supported OS of the pinned Playwright release.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -107,7 +120,7 @@ jobs:
           fi
       - name: Run selected action
         env:
-          RUN_MODE: ${{ inputs.mode || 'publish' }}
+          RUN_MODE: ${{ inputs.mode || needs.posting_window.outputs.mode }}
           # Scheduled runs publish at most one record; manual runs use the chosen limit.
           RUN_LIMIT: ${{ github.event_name == 'schedule' && '1' || inputs.limit || vars.MAX_PER_RUN || '1' }}
           SOURCE_TYPE: ${{ inputs.source_type || 'booking' }}
@@ -116,6 +129,9 @@ jobs:
             check-facebook) python main.py --check-facebook ;;
             preview) python main.py --dry-run --limit "$RUN_LIMIT" --source-type "$SOURCE_TYPE" ;;
             publish) python main.py --limit "$RUN_LIMIT" --source-type "$SOURCE_TYPE" ;;
+            publish-wanted) python main.py --limit 1 --source-type warrant ;;
+            preview-status) python main.py --check-status --dry-run ;;
+            check-status) python main.py --check-status ;;
             *) echo "Unknown action" >&2; exit 1 ;;
           esac
       # Save successes AND uncertain outcomes even when another record failed.

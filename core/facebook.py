@@ -84,6 +84,74 @@ class FacebookClient:
             raise FacebookError("Facebook did not confirm the configured Page ID; verify the Page token and ID.")
         return payload
 
+    def _target(self, remote_ref: str) -> tuple[str, str]:
+        """Resolve a stored photo/post reference without accepting paths or URLs."""
+        if not isinstance(remote_ref, str):
+            raise FacebookError("A stored Facebook photo or post ID is required.")
+        reference = remote_ref.strip()
+        if reference.startswith("meta:"):
+            reference = reference[len("meta:"):]
+        if not re.fullmatch(r"[0-9]+(?:_[0-9]+)?", reference):
+            raise FacebookError("The Facebook reference must be a numeric photo ID or Page_post ID.")
+        if "_" in reference:
+            if reference.split("_", 1)[0] != self.page_id:
+                raise FacebookError("The stored Facebook post belongs to a different Page.")
+            return reference, "message"
+        return reference, "name"
+
+    def _owned_caption(self, reference: str, field: str) -> str:
+        try:
+            response = requests.get(
+                f"https://graph.facebook.com/{self.version}/{reference}",
+                headers=self._headers, params={"fields": f"id,{field},from{{id}}"},
+                timeout=(10, 30), allow_redirects=False,
+            )
+        except requests.RequestException as exc:
+            raise FacebookError(
+                f"Facebook caption check failed ({type(exc).__name__}); check connectivity."
+            ) from None
+        payload = self._decode(response, upload=False)
+        owner = payload.get("from")
+        if (str(payload.get("id", "")) != reference or not isinstance(owner, dict)
+                or str(owner.get("id", "")) != self.page_id):
+            raise FacebookError("Facebook did not confirm this content belongs to the configured Page.")
+        caption = payload.get(field, "")
+        if not isinstance(caption, str):
+            raise FacebookError("Facebook returned an invalid caption; no edit was made.")
+        return caption
+
+    def get_caption(self, remote_ref: str) -> str:
+        """Read a stored post/photo caption only after confirming Page ownership."""
+        reference, field = self._target(remote_ref)
+        return self._owned_caption(reference, field)
+
+    def update_caption(self, remote_ref: str, caption: str, *, expected_caption: str | None = None) -> None:
+        """Edit an existing owned post/photo in place; never create or delete one.
+
+        Reapplying the same caption is idempotent. A lost response is still
+        reported as uncertain so callers do not record an unconfirmed edit.
+        """
+        if not isinstance(caption, str):
+            raise FacebookError("The updated Facebook caption must be text.")
+        reference, field = self._target(remote_ref)
+        current = self._owned_caption(reference, field)
+        if expected_caption is not None and current != expected_caption:
+            raise FacebookError("The caption changed since the roster check; no edit was made. Retry after reviewing the current text.")
+        try:
+            response = requests.post(
+                f"https://graph.facebook.com/{self.version}/{reference}",
+                headers=self._headers, data={field: caption}, timeout=(10, 30),
+                allow_redirects=False,
+            )
+        except requests.RequestException as exc:
+            raise FacebookDeliveryUnknown(
+                f"Facebook caption update response was lost ({type(exc).__name__}); "
+                "the edit is not confirmed."
+            ) from None
+        payload = self._decode(response, upload=True)
+        if payload.get("success") is not True:
+            raise FacebookDeliveryUnknown("Facebook did not confirm the caption update succeeded.")
+
     def publish_photo(self, image_path: str, caption: str) -> str:
         with open(image_path, "rb") as image:
             try:

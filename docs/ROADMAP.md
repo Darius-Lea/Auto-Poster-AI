@@ -4,8 +4,9 @@ First make one Facebook Page connection reliable, then add more destinations and
 the product interface. The current repository contains a batch scraper,
 watermarking, captions, publishing backends, and Telegram summaries. It does not
 contain an OAuth connection screen, subscriptions, an analytics dashboard, or a
-general-purpose content engine. Only the Fort Wayne Allen County Sheriff roster
-is configured today.
+general-purpose content engine. The Fort Wayne Allen County Sheriff roster is
+the active source; the owner's TheMostWanted.net source is configured for preview
+and remains blocked from publishing until its site-specific parsing is verified.
 
 ## First: your Facebook Page
 

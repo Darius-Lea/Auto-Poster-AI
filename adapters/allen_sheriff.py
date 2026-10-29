@@ -162,18 +162,60 @@ class AllenSheriffAdapter(ScraperAdapter):
             log.info("Dumped raw HTML (first page) to dump_allen_sheriff.html")
         return html
 
-    def fetch(self, url: str) -> list[Record]:
-        self.errors: list[str] = []
+    def snapshot_rows(self, url: str) -> list[dict]:
+        """Read the complete current roster without age, seen, or detail limits.
+
+        Status monitoring must fail closed if a person-shaped table row cannot
+        be parsed: silently losing that row could look like a custody change.
+        A genuinely empty table remains valid here; monitors decide whether an
+        empty snapshot is safe to accept.
+        """
+        self.snapshot_complete = False
+        self.last_snapshot = None
         try:
             pages = self._load_list_html(url)
         except Exception as exc:
             raise RuntimeError(f"Could not load Allen Sheriff roster at {url}: {exc}") from exc
         by_url: dict[str, dict] = {}
-        for html in pages:
-            for r in parse_rows(html, url):
+        declared_counts: list[int] = []
+        for page_number, html in enumerate(pages, start=1):
+            parsed = parse_rows(html, url)
+            soup = BeautifulSoup(html, "html.parser")
+            for info in soup.select(".dataTables_info, .dt-info, [id$='_info']"):
+                match = re.search(
+                    r"\bShowing\s+[\d,]+\s+to\s+[\d,]+\s+of\s+([\d,]+)\s+(?:entries|records)\b",
+                    info.get_text(" ", strip=True), re.IGNORECASE,
+                )
+                if match:
+                    # The first 'of' is the active result count. A later
+                    # '(filtered from ...)' count describes a different set.
+                    declared_counts.append(int(match.group(1).replace(",", "")))
+            candidates = [
+                row for row in soup.select("table tbody tr")
+                if row.find("img") or row.find("a", href=True)
+            ]
+            if len(parsed) < len(candidates):
+                raise RuntimeError(
+                    f"Could not parse every roster row on page {page_number}; "
+                    "snapshot is incomplete and must not update custody status"
+                )
+            for r in parsed:
                 by_url[r["detail_url"]] = r
         rows = list(by_url.values())
+        if declared_counts and len(rows) < max(declared_counts):
+            raise RuntimeError(
+                f"Roster declares {max(declared_counts)} current entries but only "
+                f"{len(rows)} unique rows were read; snapshot is incomplete "
+                "and must not update custody status"
+            )
         log.info("%d unique roster row(s) across all pages", len(rows))
+        self.last_snapshot = [dict(row) for row in rows]
+        self.snapshot_complete = True
+        return rows
+
+    def fetch(self, url: str) -> list[Record]:
+        self.errors: list[str] = []
+        rows = self.snapshot_rows(url)
         if MAX_AGE_DAYS < 0:
             raise ValueError("MAX_AGE_DAYS must be 0 (all current bookings) or a positive number")
         if MAX_AGE_DAYS:

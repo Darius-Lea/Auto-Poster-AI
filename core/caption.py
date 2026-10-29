@@ -26,7 +26,7 @@ def _fallback(record: Record) -> str:
     age = f", {record.age}," if record.age else ""
     if record.kind == "warrant":
         return (
-            f"The source lists {record.name}{age} as wanted in connection with {record.charge}. "
+            f"MOST WANTED\n\nThe source lists {record.name}{age} as wanted in connection with {record.charge}. "
             f"Source: {record.source_url}. Listing status can change. {DISCLAIMER}"
         )
     return (f"{record.name}{age} was listed in public records for {record.charge} "

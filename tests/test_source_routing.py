@@ -50,6 +50,19 @@ class SourceRoutingTests(unittest.TestCase):
             main.process_city(self.city, conn, args, {}, {})
         self.assertEqual(get_adapter.call_count, 2)
 
+    def test_unverified_wanted_source_cannot_publish(self):
+        args = SimpleNamespace(source_type='warrant', dump_html=False,
+                               dry_run=False, limit=1, attempted=0)
+        errors = {}
+        with sqlite3.connect(':memory:') as conn, \
+                patch.object(main, 'get_adapter') as get_adapter, \
+                patch.object(main.publisher, 'publish') as publish, \
+                patch.object(main.publisher, 'destination', return_value='queue:fort-wayne'):
+            main.process_city(self.city, conn, args, {}, errors)
+        get_adapter.assert_not_called()
+        publish.assert_not_called()
+        self.assertIn('Wanted source is not verified', errors['Fort Wayne'][0])
+
     def test_invalid_explicit_kind_is_rejected_but_valid_kinds_load(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'cities.json'
