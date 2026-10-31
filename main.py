@@ -45,7 +45,7 @@ def load_config(path: str) -> list[dict]:
         for s in c["sources"]:
             if "adapter" not in s or "url" not in s:
                 raise ValueError(f"Source missing adapter/url in {c['city']}")
-            if "kind" in s and s["kind"] not in ("booking", "warrant"):
+            if "kind" in s and s["kind"] not in ("booking", "warrant", "case"):
                 raise ValueError(f"Source kind must be booking or warrant in {c['city']}")
     return cities
 
@@ -63,6 +63,7 @@ def init_db() -> sqlite3.Connection:
     custody.initialize(conn)
     grouped.initialize(conn)
     catchup_control.initialize(conn)
+    posting_cadence.initialize(conn)
     return conn
 
 
@@ -98,12 +99,16 @@ def process_city(city: dict, conn: sqlite3.Connection, args, results: dict, erro
     limit = getattr(args, "limit", None)
     for source in city["sources"]:
         selected_kind = getattr(args, "source_type", "all")
-        if selected_kind != "all" and source_kind(source) != selected_kind:
+        kind = source_kind(source)
+        if selected_kind != "all" and kind != selected_kind:
             continue
         if limit is not None and args.attempted >= limit:
             break
-        if source_kind(source) == "warrant" and not args.dry_run and source.get("verified") is not True:
-            errors[name].append("Wanted source is not verified; preview and validate its live listings before publishing")
+        if kind == "case" and not posting_cadence.is_due(conn):
+            log.info("Skipping Fort Wayne case notice; the 48-hour posting interval has not elapsed")
+            continue
+        if kind in ("warrant", "case") and not args.dry_run and source.get("verified") is not True:
+            errors[name].append(f"{kind.title()} source is not verified; preview and validate it before publishing")
             continue
         try:
             adapter = get_adapter(source["adapter"], dump_html=args.dump_html)
@@ -142,6 +147,8 @@ def process_city(city: dict, conn: sqlite3.Connection, args, results: dict, erro
                     claimed = delivery.claim(conn, h, destination)
                     if not claimed:
                         continue
+                    if rec.kind == "case":
+                        posting_cadence.reserve_attempt(conn)
                     uploading = True
                     ref = publisher.publish(rec, stamped, cap, city["workspace_key"])
                     if not ref:
@@ -169,6 +176,9 @@ def process_city(city: dict, conn: sqlite3.Connection, args, results: dict, erro
                         delivery.uncertain(conn, h, destination)
                     else:
                         delivery.release(conn, h, destination)
+                if rec.kind == "case" and not (
+                        uploading and not isinstance(exc, FacebookError) and destination.startswith("meta:")):
+                    posting_cadence.clear_failed_attempt(conn)
 
 
 def main() -> int:
@@ -178,7 +188,7 @@ def main() -> int:
     setup_logging()
     parser = argparse.ArgumentParser(description="Auto Post pipeline")
     parser.add_argument("--city", help="Only run this city (display name or workspace_key)")
-    parser.add_argument("--source-type", choices=("booking", "warrant", "all"), default="all",
+    parser.add_argument("--source-type", choices=("booking", "warrant", "case", "all"), default="all",
                         help="Only run booking or warrant sources; default runs all configured sources")
     parser.add_argument("--dry-run", action="store_true", help="Scrape and caption, but do not publish")
     parser.add_argument("--dump-html", action="store_true", help="Save raw page HTML for selector debugging")
