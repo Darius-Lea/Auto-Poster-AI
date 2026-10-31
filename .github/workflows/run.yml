@@ -135,6 +135,10 @@ jobs:
             publish-wanted) python main.py --limit 1 --source-type warrant ;;
             preview-status) python main.py --check-status --dry-run ;;
             check-status) python main.py --check-status ;;
+            publish-and-check)
+              python main.py --limit "$RUN_LIMIT" --source-type booking &&
+              python main.py --check-status
+              ;;
             *) echo "Unknown action" >&2; exit 1 ;;
           esac
       # Save successes AND uncertain outcomes even when another record failed.
