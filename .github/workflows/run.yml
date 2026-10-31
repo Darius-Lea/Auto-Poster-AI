@@ -57,8 +57,10 @@ jobs:
     if: >-
       needs.posting_window.outputs.run == 'true' &&
       (github.event_name == 'workflow_dispatch' ||
-       (vars.PUBLISH_BACKEND == 'meta' && vars.AUTOPOST_ENABLED == 'true' &&
-        (needs.posting_window.outputs.mode != 'publish-wanted' || vars.WANTED_ENABLED == 'true')) ||
+       (vars.PUBLISH_BACKEND == 'meta' &&
+        (needs.posting_window.outputs.mode == 'check-status' ||
+         (vars.AUTOPOST_ENABLED == 'true' &&
+          (needs.posting_window.outputs.mode != 'publish-wanted' || vars.WANTED_ENABLED == 'true')))) ||
        (needs.posting_window.outputs.mode == 'publish' && vars.PUBLISH_BACKEND != 'meta'))
     # Match the supported OS of the pinned Playwright release.
     runs-on: ubuntu-24.04
