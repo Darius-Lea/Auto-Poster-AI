@@ -17,7 +17,8 @@ class CaptionKindTests(unittest.TestCase):
         self.assertIn('Listing status can change', text)
         self.assertIn(DISCLAIMER, text)
         self.assertIn('MOST WANTED FUGITIVE OF THE DAY', text)
-        self.assertTrue(text.endswith('#AllenCounty #Indiana'))
+        self.assertIn('#MostWanted', text)
+        self.assertTrue(text.endswith('#AllenCounty #Indiana #MostWanted'))
         self.assertNotIn('was booked', text)
         self.assertNotIn('convicted', text)
 
