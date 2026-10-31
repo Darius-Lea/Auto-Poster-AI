@@ -11,7 +11,7 @@ on:
     # Daily custody scan fallback.
     - cron: "17 12 * * *"
     - cron: "17 13 * * *"
-    # One wanted post at 4:17 p.m., separately gated until the source is verified.
+    # One Allen County Fugitive of the Day post at 4:17 p.m. Fort Wayne time.
     - cron: "17 20 * * *"
     - cron: "17 21 * * *"
   workflow_dispatch:
@@ -60,8 +60,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' ||
        (vars.PUBLISH_BACKEND == 'meta' &&
         (needs.posting_window.outputs.mode == 'check-status' ||
-         (vars.AUTOPOST_ENABLED == 'true' &&
-          (needs.posting_window.outputs.mode != 'publish-wanted' || vars.WANTED_ENABLED == 'true')))) ||
+         vars.AUTOPOST_ENABLED == 'true')) ||
        (needs.posting_window.outputs.mode == 'publish' && vars.PUBLISH_BACKEND != 'meta'))
     # Match the supported OS of the pinned Playwright release.
     runs-on: ubuntu-24.04
