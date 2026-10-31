@@ -13,7 +13,7 @@ class CaptionKindTests(unittest.TestCase):
             text = make_caption(record, 'Fort Wayne')
         ai.assert_not_called()
         self.assertIn('as wanted', text)
-        self.assertIn(record.source_url, text)
+        self.assertNotIn(record.source_url, text)
         self.assertIn('Listing status can change', text)
         self.assertIn(DISCLAIMER, text)
         self.assertIn('MOST WANTED FUGITIVE OF THE DAY', text)
