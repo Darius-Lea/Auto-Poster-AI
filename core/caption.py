@@ -44,7 +44,7 @@ def _fallback(record: Record) -> str:
             f"The listing covers Allen County, including Fort Wayne, New Haven, Huntertown, Leo-Cedarville, Grabill, and Woodburn. "
             f"Please send tips to law enforcement; do not approach. Listing status can change. {DISCLAIMER}\n\n"
             "Follow this Page for Allen County wanted-list updates.\n\n"
-            "#AllenCounty #FortWayne #Indiana"
+            "#FortWayne #FortWayneIndiana #AllenCounty #Indiana #MostWanted"
         )
     text = (f"{record.name}{age} was listed in public records for {record.charge} "
             f"(date: {record.booking_date or 'not stated'}). {DISCLAIMER}")
