@@ -44,7 +44,7 @@ def scheduled_mode(event_name: str, event_schedule: str,
         },
         timedelta(hours=-5): {
             STANDARD_CRON: "publish", STATUS_STANDARD_CRON: "check-status",
-            HOURLY_STATUS_CRON: "check-status",
+            FREQUENT_BOOKING_CRON: "publish-and-check",
             WANTED_STANDARD_CRON: "publish-wanted",
         },
     }.get(offset, {})
