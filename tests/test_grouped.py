@@ -117,30 +117,33 @@ class GroupedTests(unittest.TestCase):
             with self.subTest(size=len(invalid)), self.assertRaises(ValueError):
                 self.create("invalid", members=invalid)
 
-    def test_captions_retain_originals_and_scope_status_to_one_member(self):
+    def test_local_caption_only_shows_status_for_removed_member_and_keeps_original_data(self):
         original = copy.deepcopy(self.members)
         caption = grouped.render_caption(self.members, {"hash-0": "no_longer_listed"},
                                          datetime(2026, 10, 28, 12, 17, tzinfo=timezone.utc))
         self.assertTrue(caption.startswith(grouped.TITLE))
-        self.assertIn("1. Fixture 0\nOriginal caption 0.", caption)
-        self.assertIn("2. Fixture 1\nOriginal caption 1.", caption)
+        self.assertIn(f"1. Fixture 0\n{grouped.STATUS_NOTE}", caption)
+        self.assertNotIn("Original caption 0.", caption)
+        self.assertNotIn("2. Fixture 1", caption)
+        self.assertNotIn("Original caption 1.", caption)
         self.assertEqual(caption.count(grouped.STATUS_NOTE), 1)
-        self.assertLess(caption.index(grouped.STATUS_NOTE), caption.index("2. Fixture 1"))
         self.assertIn("08:17 AM EDT", caption)
         self.assertTrue(caption.endswith(grouped.DISCLAIMER))
         self.assertEqual(self.members, original)
         restored = grouped.render_caption(self.members, {"hash-0": "listed"})
         self.assertNotIn(grouped.STATUS_NOTE, restored)
-        self.assertIn("Original caption 0.", restored)
+        self.assertNotIn("Fixture 0", restored)
 
-    def test_fallback_caption_includes_source_and_rejects_unknown_status(self):
+    def test_fallback_caption_omits_source_and_member_details_and_rejects_unknown_status(self):
         member = dict(self.members[0])
         member.pop("caption")
         member["charge"] = "Example allegation"
         caption = grouped.render_caption([member])
-        self.assertIn(member["source_url"], caption)
-        self.assertIn(member["booking_date"], caption)
-        self.assertIn("Example allegation", caption)
+        self.assertTrue(caption.startswith(grouped.TITLE))
+        self.assertNotIn(member["source_url"], caption)
+        self.assertNotIn(member["booking_date"], caption)
+        self.assertNotIn(member["charge"], caption)
+        self.assertNotIn(member["name"], caption)
         with self.assertRaises(ValueError):
             grouped.render_caption([member], {member["hash"]: "released"})
         with self.assertRaises(ValueError):
