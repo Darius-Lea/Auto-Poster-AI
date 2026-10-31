@@ -10,7 +10,7 @@ import re
 import sqlite3
 
 
-MIN_SCAN_INTERVAL = timedelta(hours=20)
+MIN_SCAN_INTERVAL = timedelta(minutes=55)
 STATUSES = {"listed", "no_longer_listed"}
 
 
@@ -97,7 +97,7 @@ def pending_updates(conn: sqlite3.Connection, source_key: str) -> list[dict]:
 
 def observe(conn: sqlite3.Connection, source_key: str, members: set[str],
             now: datetime) -> list[dict]:
-    """Accept a complete daily snapshot and derive safe caption-update work.
+    """Accept a complete hourly snapshot and derive safe caption-update work.
 
     Empty snapshots and declines exceeding 20% require investigation. Two
     accepted missing observations, at least 20 hours apart, are needed before
