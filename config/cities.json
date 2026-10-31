@@ -9,7 +9,7 @@
         "adapter": "indiana_most_wanted",
         "kind": "warrant",
         "url": "https://www.themostwanted.net/Indiana/Allen/Browse/New",
-        "verified": false
+        "verified": true
       }
     ]
   }
