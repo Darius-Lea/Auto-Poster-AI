@@ -26,9 +26,9 @@ BOOKING_TAGS = "#FortWayne #AllenCounty"
 
 
 def localize_caption(current: str) -> str:
-    # Remove only the source labels this application added previously.
-    cleaned = re.sub(r"(?m)^Public record source: https?://[^\\s]+\\n?", "", current)
-    cleaned = re.sub(r"(?m)^(Roster checked: [^\\n]+)\\nSource: https?://[^\\s]+$", r"\\1", cleaned)
+    # Remove only source labels this application may have added previously.
+    cleaned = re.sub(r"(?m)^Public record source: https?://[^\s]+\n?", "", current)
+    cleaned = re.sub(r"(?m)^(Roster checked: [^\n]+)\nSource: https?://[^\s]+$", r"\1", cleaned)
     additions = []
     if BOOKING_AREA not in cleaned:
         additions.append(BOOKING_AREA)
@@ -38,7 +38,8 @@ def localize_caption(current: str) -> str:
         additions.append(BOOKING_TAGS)
     if not additions:
         return cleaned
-    return "\\n".join(additions) + "\\n\\n" + cleaned
+    return "\n".join(additions) + "\n\n" + cleaned
+
 MANAGED_NOTE = re.compile(
     r"\n\n(?:\(UPDATE: NO LONGER LISTED IN ALLEN COUNTY JAIL\)|UPDATE: \(RELEASED\))"
     r"(?:\nFor custody information: Allen County Jail \(260\) 449-7376\.)?"
