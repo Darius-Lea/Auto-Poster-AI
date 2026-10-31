@@ -27,7 +27,13 @@ class RosterMonitorTests(unittest.TestCase):
                       'detail_url': f'https://source.example/detail/{index}'} for index in range(5)]
         self.person = hash_fields(self.rows[0]['name'], self.rows[0]['booking_date'], self.rows[0]['detail_url'])
         self.now = datetime(2026, 10, 28, 12, tzinfo=timezone.utc)
-        self.original = 'Original booking information. Presumed innocent.'
+        self.original = (
+            "Allen County booking update for Fort Wayne, New Haven, Huntertown, Leo-Cedarville, "
+            "Grabill, Woodburn, and nearby communities.\n\n"
+            "Original booking information. Presumed innocent.\n\n"
+            "Follow this Page for Allen County booking and roster-status updates.\n\n"
+            "#FortWayne #AllenCounty"
+        )
         self.captions = {'123_456': self.original}
         self.client = Mock()
         self.client.get_caption.side_effect = lambda ref: self.captions[ref.removeprefix('meta:')]
