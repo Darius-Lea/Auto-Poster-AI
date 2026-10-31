@@ -10,6 +10,12 @@
         "kind": "warrant",
         "url": "https://www.themostwanted.net/Indiana/Allen/Browse/New",
         "verified": true
+      },
+      {
+        "adapter": "solve_the_case",
+        "kind": "case",
+        "url": "https://www.solvethecase.org/agency/fort-wayne-police-department-in",
+        "verified": true
       }
     ]
   }
