@@ -13,8 +13,32 @@ from adapters.base import Record, ScraperAdapter
 
 log = logging.getLogger("adapters.solve_the_case")
 CASE_LINK = re.compile(r"/case/[^/]+/[^/?#]+")
-CASE_NUMBER = re.compile(r"\bCASE\s*#\s*:?\s*([A-Za-z0-9-]+)", re.IGNORECASE)
 CASE_KIND = re.compile(r"\b(MISSING PERSON|FUGITIVE|MURDER|HOMICIDE|SEXUAL ASSAULT|UNSOLVED)\b", re.IGNORECASE)
+
+
+def parse_case_links(html: str, base_url: str) -> list[dict]:
+    """Extract each unique case URL and stable case number from the agency page."""
+    soup = BeautifulSoup(html, "html.parser")
+    result = []
+    seen = set()
+    for anchor in soup.select("a[href]"):
+        href = anchor.get("href", "")
+        if not CASE_LINK.search(href):
+            continue
+        detail_url = urljoin(base_url, href)
+        if detail_url in seen:
+            continue
+        seen.add(detail_url)
+        match = re.search(r"/case/([^/]+)/", href, re.IGNORECASE)
+        if not match:
+            continue
+        title = anchor.get_text(" ", strip=True)
+        result.append({
+            "url": detail_url,
+            "case_number": match.group(1),
+            "title": title,
+        })
+    return result
 
 
 def _field(lines: list[str], label: str) -> str:
@@ -29,49 +53,14 @@ def _field(lines: list[str], label: str) -> str:
     return ""
 
 
-def _card_text(anchor) -> str:
-    node = anchor
-    best = anchor.get_text(" ", strip=True)
-    for _ in range(4):
-        parent = node.parent
-        if parent is None:
-            break
-        text = parent.get_text(" ", strip=True)
-        if text:
-            best = text
-        if "CASE" in text.upper() and ("SOLVED" in text.upper() or "OPEN" in text.upper()):
-            return text
-        node = parent
-    return best
-
-
-def parse_case_links(html: str, base_url: str) -> list[dict]:
-    """Extract stable case identifiers and detail links from the agency page."""
-    soup = BeautifulSoup(html, "html.parser")
-    result = []
-    seen = set()
-    for anchor in soup.select("a[href]"):
-        href = anchor.get("href", "")
-        if not CASE_LINK.search(href):
-            continue
-        detail_url = urljoin(base_url, href)
-        if detail_url in seen:
-            continue
-        seen.add(detail_url)
-        card = _card_text(anchor)
-        if re.search(r"\bSOLVED\b", card, re.IGNORECASE):
-            continue
-        text = anchor.get_text(" ", strip=True) or card
-        number = CASE_NUMBER.search(card) or CASE_NUMBER.search(text)
-        if not number:
-            continue
-        result.append({
-            "url": detail_url,
-            "case_number": number.group(1),
-            "card_text": card,
-            "title": text,
-        })
-    return result
+def _case_name_hint(title: str, url: str) -> str:
+    if title:
+        return re.split(
+            r"\s+(?:MISSING|FUGITIVE|MURDER|HOMICIDE|SEXUAL ASSAULT)\b",
+            title, maxsplit=1, flags=re.IGNORECASE,
+        )[0].strip()
+    slug = url.rstrip("/").rsplit("/", 1)[-1]
+    return re.sub(r"[-_]+", " ", slug).title()
 
 
 class SolveTheCaseAdapter(ScraperAdapter):
@@ -94,9 +83,7 @@ class SolveTheCaseAdapter(ScraperAdapter):
             raise ValueError("The per-run record limit must be positive")
 
         for item in links:
-            # Case number and detail URL make a stable identity before any detail request.
-            name_hint = re.split(r"\s+(?:MISSING|FUGITIVE|MURDER|HOMICIDE)\b", item["title"], maxsplit=1,
-                                 flags=re.IGNORECASE)[0].strip()
+            name_hint = _case_name_hint(item["title"], item["url"])
             if seen and seen(name_hint, item["case_number"], item["url"]):
                 continue
             try:
@@ -105,10 +92,9 @@ class SolveTheCaseAdapter(ScraperAdapter):
                 detail = BeautifulSoup(response.text, "html.parser")
                 text = detail.get_text("\n", strip=True)
                 lines = [line.strip() for line in text.splitlines() if line.strip()]
-                status = _field(lines, "Status")
-                jurisdiction = _field(lines, "Jurisdiction")
-                if status.casefold() != "open":
+                if _field(lines, "Status").casefold() != "open":
                     continue
+                jurisdiction = _field(lines, "Jurisdiction")
                 if "fort wayne police department" not in jurisdiction.casefold():
                     continue
 
@@ -120,16 +106,16 @@ class SolveTheCaseAdapter(ScraperAdapter):
                     continue
 
                 image_url = ""
-                image_meta = detail.select_one('meta[property="og:image"]')
-                if image_meta and image_meta.get("content"):
-                    image_url = urljoin(item["url"], image_meta["content"])
+                for image in detail.select("img[src]"):
+                    alt = (image.get("alt") or "").casefold()
+                    src = image.get("src", "")
+                    if name.casefold() in alt and src:
+                        image_url = urljoin(item["url"], src)
+                        break
                 if not image_url:
-                    for image in detail.select("img[src]"):
-                        alt = (image.get("alt") or "").casefold()
-                        src = image.get("src", "")
-                        if name.casefold() in alt and src:
-                            image_url = urljoin(item["url"], src)
-                            break
+                    image_meta = detail.select_one('meta[property="og:image"]')
+                    if image_meta and image_meta.get("content"):
+                        image_url = urljoin(item["url"], image_meta["content"])
                 if not image_url:
                     self.errors.append(f"Skipped case {item['case_number']}: no case image was available")
                     continue
