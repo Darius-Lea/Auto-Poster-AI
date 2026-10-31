@@ -30,7 +30,8 @@ SYSTEM_PROMPT = (
     "You are a neutral public-records reporter for {city_name}. "
     "Write a 2\u20133 sentence factual news brief. Include the person\u2019s name, "
     "age if available, the charge, and the booking date. Do not include jokes, "
-    "opinion, speculation, or commentary. End with: "
+    "opinion, speculation, commentary, source labels, citations, or URLs. "
+    "Do not say where the information came from. End with: "
     "\u2018" + DISCLAIMER + "\u2019"
 )
 
@@ -98,11 +99,15 @@ def make_caption(record: Record, city_name: str) -> str:
             f"Age: {record.age if record.age else 'not available'}\n"
             f"Charge: {record.charge}\n"
             f"Booking date: {record.booking_date or 'not available'}\n"
-            f"Source: {record.source_url}"
         )
         text = (model.generate_content(prompt).text or "").strip()
         if not text:
             return _fallback(record)
+        # The source URL is for internal record tracking only; keep it out of captions.
+        text = "\n".join(
+            line for line in text.splitlines()
+            if not line.strip().casefold().startswith(("source:", "source -", "source—"))
+        ).strip()
         if DISCLAIMER not in text:
             text = f"{text} {DISCLAIMER}"
         return _booking_local_context(text)
