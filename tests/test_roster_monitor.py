@@ -58,7 +58,7 @@ class RosterMonitorTests(unittest.TestCase):
         self.assertEqual(self.run_day(0)['updated'], 0)
         self.assertEqual(self.run_day(1, absent=True)['updated'], 0)
 
-    def test_daily_disappearance_edits_original_and_reappearance_removes_only_managed_note(self):
+    def test_disappearance_edits_person_caption_and_reappearance_removes_managed_note(self):
         self.prepare_first_absence()
         report = self.run_day(2, absent=True)
         self.assertEqual(report, {'updated': 1, 'planned': 1, 'errors': []})
@@ -66,7 +66,8 @@ class RosterMonitorTests(unittest.TestCase):
         self.assertTrue(self.captions['123_456'].startswith(self.original))
         self.assertIn(STATUS_NOTE, self.captions['123_456'])
         self.assertIn('Roster checked:', self.captions['123_456'])
-        self.assertNotIn('RELEASED', self.captions['123_456'])
+        self.assertIn('UPDATE: (RELEASED)', self.captions['123_456'])
+        self.assertIn('Allen County Jail (260) 449-7376', self.captions['123_456'])
         self.assertEqual(self.run_day(3, absent=True)['updated'], 0)
         self.assertEqual(self.client.update_caption.call_count, 1)
         # An editor's changes to the booking remain when the roster listing returns.
@@ -187,23 +188,23 @@ class RosterMonitorTests(unittest.TestCase):
         self.captions['456'] = self.original
         self.captions['123_789'] = 'Original grouped booking text.'
 
-    def test_grouped_booking_updates_both_photo_and_feed_without_resharing(self):
+    def test_grouped_booking_updates_only_person_photo_caption(self):
         self.add_group()
         self.prepare_first_absence()
         report = self.run_day(2, absent=True)
-        self.assertEqual(report, {'updated': 2, 'planned': 2, 'errors': []})
+        self.assertEqual(report, {'updated': 1, 'planned': 1, 'errors': []})
         self.assertIn(STATUS_NOTE, self.captions['456'])
-        self.assertIn(group_monitor.HEADER, self.captions['123_789'])
+        self.assertEqual(self.captions['123_789'], 'Original grouped booking text.')
         self.assertIn(self.rows[0]['name'], self.captions['123_789'])
         self.assertEqual(self.run_day(3, absent=True)['updated'], 0)
-        self.assertEqual(self.run_day(4)['updated'], 2)
+        self.assertEqual(self.run_day(4)['updated'], 1)
         self.assertEqual(self.captions['456'], self.original)
         self.assertEqual(self.captions['123_789'], 'Original grouped booking text.')
         self.client.publish_group.assert_not_called()
         self.client.publish_photo.assert_not_called()
         self.client.delete.assert_not_called()
 
-    def test_group_footer_still_updates_if_member_photo_edit_fails(self):
+    def test_group_caption_stays_unchanged_if_member_photo_edit_fails(self):
         self.add_group()
         self.prepare_first_absence()
 
@@ -214,10 +215,10 @@ class RosterMonitorTests(unittest.TestCase):
 
         self.client.update_caption.side_effect = edit
         report = self.run_day(2, absent=True)
-        self.assertEqual(report['updated'], 1)
+        self.assertEqual(report['updated'], 0)
         self.assertTrue(report['errors'])
         self.assertEqual(self.captions['456'], self.original)
-        self.assertIn(group_monitor.HEADER, self.captions['123_789'])
+        self.assertEqual(self.captions['123_789'], 'Original grouped booking text.')
         self.client.update_caption.side_effect = self.apply_caption
         self.assertEqual(self.run_day(3, absent=True)['updated'], 1)
         self.assertIn(STATUS_NOTE, self.captions['456'])
