@@ -95,6 +95,7 @@ def reconcile_city(city: dict, conn: sqlite3.Connection, client, hash_fields,
                 rows = adapter.snapshot_rows(source["url"])
                 if not adapter.snapshot_complete:
                     raise RuntimeError("The adapter did not confirm a complete roster")
+                imported_captions = {}
                 members = {
                     hash_fields(row["name"], row["booking_date"], row["detail_url"]): row
                     for row in rows
@@ -115,6 +116,7 @@ def reconcile_city(city: dict, conn: sqlite3.Connection, client, hash_fields,
                     ).fetchone()
                     if receipt and receipt[0]:
                         original = client.get_caption(receipt[0])
+                        imported_captions[str(receipt[0]).removeprefix("meta:")] = original
                         custody.track(work, identity, destination, key, receipt[0], original,
                                       row["detail_url"], row["name"])
                 unmapped = work.execute(
@@ -127,13 +129,21 @@ def reconcile_city(city: dict, conn: sqlite3.Connection, client, hash_fields,
                     log.warning("%s earlier confirmed posts have no roster/source mapping; "
                                 "they cannot be updated automatically", unmapped)
                 candidates = custody.observe(work, key, set(members), clock)
+                status_refs = {
+                    candidate["remote_ref"] for candidate in candidates
+                    if candidate["destination"] == destination
+                }
                 tracked = work.execute(
                     "SELECT remote_ref FROM custody_posts WHERE source_key=? AND destination=?",
                     (key, destination),
                 ).fetchall()
                 for (remote_ref,) in tracked:
                     try:
-                        current = client.get_caption(remote_ref)
+                        if remote_ref in status_refs:
+                            continue
+                        current = imported_captions.pop(remote_ref, None)
+                        if current is None:
+                            current = client.get_caption(remote_ref)
                         caption = localize_caption(current)
                         if caption == current:
                             continue
@@ -153,9 +163,10 @@ def reconcile_city(city: dict, conn: sqlite3.Connection, client, hash_fields,
                 if candidate["destination"] != destination:
                     continue
                 try:
-                    current = client.get_caption(candidate["remote_ref"])
-                    candidate["source_url"] = source["url"]
-                    caption = status_caption(current, candidate)
+                    current = imported_captions.pop(candidate["remote_ref"], None)
+                    if current is None:
+                        current = client.get_caption(candidate["remote_ref"])
+                    caption = localize_caption(status_caption(current, candidate))
                     report["planned"] += 1
                     if dry_run:
                         log.info("PREVIEW: would update existing post %s to %s",
