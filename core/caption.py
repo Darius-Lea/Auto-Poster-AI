@@ -51,7 +51,37 @@ def _fallback(record: Record) -> str:
     return _booking_local_context(text)
 
 
+def _case_caption(record: Record) -> str:
+    kind = record.charge.casefold()
+    tags = ["#FortWayne", "#FortWayneIndiana", "#AllenCounty", "#Indiana"]
+    if "missing" in kind:
+        notice = "missing-person case"
+        tags.append("#MissingPerson")
+        action = "If you have information, use the case page's tip instructions to reach investigators."
+    elif "fugitive" in kind:
+        notice = "fugitive case"
+        tags.append("#MostWanted")
+        action = "Do not approach or contact the person. Send information only through the case page's tip instructions."
+    else:
+        notice = "unsolved case"
+        tags.append("#UnsolvedCase")
+        action = "If you have firsthand information, use the case page's tip instructions to reach investigators."
+    caption = (
+        f"FORT WAYNE POLICE DEPARTMENT CASE LISTING — ALLEN COUNTY, INDIANA\n\n"
+        f"Solve the Case lists {record.name} in an open {notice} (Case #{record.booking_date}) in Fort Wayne. "
+        f"Listing status can change. {action}\n\n"
+        f"Case details and tip instructions: {record.source_url}\n\n"
+        + " ".join(tags)
+    )
+    if "fugitive" in kind:
+        caption += f"\n\n{DISCLAIMER}"
+    return caption
+
+
 def make_caption(record: Record, city_name: str) -> str:
+    # Case notices are attributed to the user-selected listing and stay neutral.
+    if record.kind == "case":
+        return _case_caption(record)
     # Keep warrant descriptions literal: a wanted listing does not establish
     # that the person has been arrested, booked, or convicted.
     if record.kind == "warrant":
