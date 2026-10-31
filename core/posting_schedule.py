@@ -19,6 +19,8 @@ STATUS_STANDARD_CRON = "17 13 * * *"
 FREQUENT_BOOKING_CRON = "*/15 * * * *"
 WANTED_DAYLIGHT_CRON = "17 20 * * *"
 WANTED_STANDARD_CRON = "17 21 * * *"
+CASE_DAYLIGHT_CRON = "17 22 * * *"
+CASE_STANDARD_CRON = "17 23 * * *"
 FORT_WAYNE = ZoneInfo("America/Indiana/Indianapolis")
 
 
@@ -41,11 +43,13 @@ def scheduled_mode(event_name: str, event_schedule: str,
             DAYLIGHT_CRON: "publish", STATUS_DAYLIGHT_CRON: "check-status",
             FREQUENT_BOOKING_CRON: "publish-and-check",
             WANTED_DAYLIGHT_CRON: "publish-wanted",
+            CASE_DAYLIGHT_CRON: "publish-case",
         },
         timedelta(hours=-5): {
             STANDARD_CRON: "publish", STATUS_STANDARD_CRON: "check-status",
             FREQUENT_BOOKING_CRON: "publish-and-check",
             WANTED_STANDARD_CRON: "publish-wanted",
+            CASE_STANDARD_CRON: "publish-case",
         },
     }.get(offset, {})
     return schedules.get(event_schedule, "")
