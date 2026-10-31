@@ -18,7 +18,7 @@ BOOKING_TAGS = "#FortWayne #AllenCounty"
 def _booking_local_context(text: str) -> str:
     if BOOKING_LOCATION in text and BOOKING_TAGS in text:
         return text
-    return f"{BOOKING_LOCATION} booking update\\n\\n{text}\\n\\n{BOOKING_TAGS}"
+    return f"{BOOKING_LOCATION} booking update\n\n{text}\n\n{BOOKING_TAGS}"
 
 MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
