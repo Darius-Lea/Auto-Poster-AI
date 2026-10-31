@@ -75,6 +75,7 @@ def main() -> int:
         grouped.initialize(conn)
         catchup_control.initialize(conn)
         if args.delete_existing_page_posts:
+            client.check_page()
             deleted = client.delete_all_published_page_posts()
             with conn:
                 conn.execute("DELETE FROM deliveries WHERE destination=?", (destination,))
