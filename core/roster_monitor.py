@@ -13,9 +13,9 @@ from core import custody
 
 log = logging.getLogger("core.roster_monitor")
 LOCAL_TIME = ZoneInfo("America/Indiana/Indianapolis")
-STATUS_NOTE = "(UPDATE: RELEASED FROM ALLEN COUNTY JAIL)"
+STATUS_NOTE = "(UPDATE: RELEASED)"
 MANAGED_NOTE = re.compile(
-    r"\n\n\(UPDATE: (?:NO LONGER LISTED IN ALLEN COUNTY JAIL|RELEASED FROM ALLEN COUNTY JAIL)\)"
+    r"\n\n\(UPDATE: (?:NO LONGER LISTED IN ALLEN COUNTY JAIL|RELEASED)\)"
     r"(?:\nFor custody information: Allen County Jail \(260\) 449-7376\.)?"
     r"\nRoster checked: [^\n]+\nSource: https?://[^\s]+"
 )
