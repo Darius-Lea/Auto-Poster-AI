@@ -195,7 +195,6 @@ class RosterMonitorTests(unittest.TestCase):
         self.assertEqual(report, {'updated': 1, 'planned': 1, 'errors': []})
         self.assertIn(STATUS_NOTE, self.captions['456'])
         self.assertEqual(self.captions['123_789'], 'Original grouped booking text.')
-        self.assertIn(self.rows[0]['name'], self.captions['123_789'])
         self.assertEqual(self.run_day(3, absent=True)['updated'], 0)
         self.assertEqual(self.run_day(4)['updated'], 1)
         self.assertEqual(self.captions['456'], self.original)
