@@ -205,29 +205,44 @@ def groups_for_record(conn: sqlite3.Connection, record_hash: str, destination: s
 
 def render_caption(members: list[dict], statuses: dict[str, str] | None = None,
                    checked_at: datetime | None = None) -> str:
-    """Render each original booking separately, attaching status only to its member."""
+    """Render a short local introduction; per-person details go in a roster comment."""
     originals = _members(members)
     status_map = statuses or {}
     if any(status not in ("listed", "no_longer_listed") for status in status_map.values()):
         raise ValueError("Unsupported roster status")
     if checked_at is not None and checked_at.utcoffset() is None:
         raise ValueError("The roster check time must be timezone-aware")
-    sections = [TITLE, "Fort Wayne, Indiana • Allen County Sheriff’s Office", "#FortWayne #AllenCounty"]
+    sections = [
+        TITLE,
+        "Allen County booking update for Fort Wayne, New Haven, Huntertown, "
+        "Leo-Cedarville, Grabill, Woodburn, and nearby communities.",
+        "Fort Wayne, Indiana • Allen County Sheriff’s Office",
+        "Follow this Page for Allen County booking and roster-status updates.",
+        "#FortWayne #AllenCounty",
+    ]
     for index, member in enumerate(originals, start=1):
-        detail = member.get("caption")
-        if not detail:
-            detail = f"Booking date: {member['booking_date']}."
-            if member.get("charge"):
-                detail += f" Listed charge: {member['charge']}."
-            detail += f"\nSource: {member['source_url']}"
-        text = f"{index}. {member['name']}\n{detail}"
-        if status_map.get(member["hash"]) == "no_longer_listed":
-            text += f"\n{STATUS_NOTE}"
-            if checked_at is not None:
-                local = checked_at.astimezone(LOCAL_TIME)
-                text += f"\nRoster checked: {local:%Y-%m-%d %I:%M %p %Z}"
+        if status_map.get(member["hash"]) != "no_longer_listed":
+            continue
+        text = f"{index}. {member['name']}\n{STATUS_NOTE}"
+        if checked_at is not None:
+            local = checked_at.astimezone(LOCAL_TIME)
+            text += f"\nRoster checked: {local:%Y-%m-%d %I:%M %p %Z}"
         sections.append(text)
     caption = "\n\n".join(sections)
     if DISCLAIMER not in caption:
         caption += "\n\n" + DISCLAIMER
     return caption
+
+
+def render_comment(members: list[dict]) -> str:
+    """List names and booking dates in a concise comment under the catch-up post."""
+    lines = [
+        "Current Allen County Jail roster entries for Fort Wayne and nearby communities:"
+    ]
+    for index, member in enumerate(_members(members), start=1):
+        lines.append(f"{index}. {member['name']} — booking date: {member['booking_date']}.")
+    lines.extend([
+        "Listed charges appear in each person’s photo caption.",
+        DISCLAIMER,
+    ])
+    return "\n".join(lines)
