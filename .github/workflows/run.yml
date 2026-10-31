@@ -14,7 +14,7 @@ on:
     # One Allen County Fugitive of the Day post at 4:17 p.m. Fort Wayne time.
     - cron: "17 20 * * *"
     - cron: "17 21 * * *"
-    # Daily case check; persistent database cooldown allows a post only every 48 hours.
+    # Daily case check; persistent database cooldown allows one post every 24 hours.
     - cron: "17 22 * * *"
     - cron: "17 23 * * *"
   workflow_dispatch:
