@@ -212,7 +212,7 @@ def render_caption(members: list[dict], statuses: dict[str, str] | None = None,
         raise ValueError("Unsupported roster status")
     if checked_at is not None and checked_at.utcoffset() is None:
         raise ValueError("The roster check time must be timezone-aware")
-    sections = [TITLE]
+    sections = [TITLE, "Fort Wayne, Indiana • Allen County Sheriff’s Office", "#FortWayne #AllenCounty"]
     for index, member in enumerate(originals, start=1):
         detail = member.get("caption")
         if not detail:
