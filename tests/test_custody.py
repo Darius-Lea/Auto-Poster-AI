@@ -30,7 +30,7 @@ class CustodyTests(unittest.TestCase):
         self.assertEqual(len(candidates), 1)
         return candidates[0]
 
-    def test_requires_two_daily_absences_and_never_infers_release(self):
+    def test_requires_two_hourly_absences_before_release_update(self):
         candidate = self.missing_candidate()
         self.assertEqual(candidate['target_status'], 'no_longer_listed')
         self.assertEqual(candidate['original_caption'], 'Original booking caption')
@@ -43,7 +43,7 @@ class CustodyTests(unittest.TestCase):
         self.observe(self.absent, 1)
         before = self.state()
         self.assertEqual(custody.observe(self.conn, 'allen', self.absent,
-                                        self.now + timedelta(days=1, hours=19)), [])
+                                        self.now + timedelta(days=1, minutes=54)), [])
         self.assertEqual(self.state(), before)
 
     def test_empty_and_suspiciously_smaller_scans_change_nothing(self):
