@@ -17,7 +17,7 @@ load_dotenv()  # Adapter limits and DB settings are read during module import.
 from adapters._common import download_image
 from adapters.base import Record, get_adapter
 from core import caption as caption_mod
-from core import catchup_control, custody, delivery, grouped, notify, publisher, roster_monitor, watermark
+from core import catchup_control, custody, delivery, grouped, notify, posting_cadence, publisher, roster_monitor, watermark
 from core.facebook import FacebookClient, FacebookDeliveryUnknown, FacebookError
 
 DB_PATH = os.getenv("AUTOPOST_DB", "autopost.db")
@@ -108,7 +108,8 @@ def process_city(city: dict, conn: sqlite3.Connection, args, results: dict, erro
             log.info("Skipping Fort Wayne case notice; the 24-hour posting interval has not elapsed")
             continue
         if kind in ("warrant", "case") and not args.dry_run and source.get("verified") is not True:
-            errors[name].append(f"{kind.title()} source is not verified; preview and validate it before publishing")
+            label = "Wanted" if kind == "warrant" else "Case"
+            errors[name].append(f"{label} source is not verified; preview and validate it before publishing")
             continue
         try:
             adapter = get_adapter(source["adapter"], dump_html=args.dump_html)
