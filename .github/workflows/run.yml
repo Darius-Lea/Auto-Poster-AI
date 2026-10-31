@@ -6,9 +6,10 @@ on:
     # job selects the right UTC schedule for daylight or standard time.
     - cron: "17 13,17,23 * * *"
     - cron: "17 0,14,18 * * *"
-    # Daily roster/status check at 8:17 a.m. Fort Wayne time, no new posts.
+    # Hourly custody check; scheduled_mode routes this to status-only.
     - cron: "17 12 * * *"
     - cron: "17 13 * * *"
+    - cron: "0 * * * *"
     # One wanted post at 4:17 p.m., separately gated until the source is verified.
     - cron: "17 20 * * *"
     - cron: "17 21 * * *"
