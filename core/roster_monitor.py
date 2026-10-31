@@ -26,9 +26,12 @@ BOOKING_TAGS = "#FortWayne #AllenCounty"
 
 
 def localize_caption(current: str) -> str:
-    # Remove only source labels this application may have added previously.
-    cleaned = re.sub(r"(?m)^Public record source: https?://[^\s]+\n?", "", current)
-    cleaned = re.sub(r"(?m)^(Roster checked: [^\n]+)\nSource: https?://[^\s]+$", r"\1", cleaned)
+    # Source URLs are kept internally for matching, never in public captions.
+    cleaned = re.sub(
+        r"(?im)^(?:public record )?source\s*:\s*[^\r\n]*(?:\r?\n|$)",
+        "",
+        current,
+    )
     additions = []
     if BOOKING_AREA not in cleaned:
         additions.append(BOOKING_AREA)
@@ -131,7 +134,7 @@ def reconcile_city(city: dict, conn: sqlite3.Connection, client, hash_fields,
                 for (remote_ref,) in tracked:
                     try:
                         current = client.get_caption(remote_ref)
-                        caption = localize_caption(current, source["url"])
+                        caption = localize_caption(current)
                         if caption == current:
                             continue
                         report["planned"] += 1
