@@ -37,6 +37,7 @@ class ScraperAdapter(abc.ABC):
 _REGISTRY = {
     "allen_sheriff": ("adapters.allen_sheriff", "AllenSheriffAdapter"),
     "indiana_most_wanted": ("adapters.indiana_most_wanted", "IndianaMostWantedAdapter"),
+    "solve_the_case": ("adapters.solve_the_case", "SolveTheCaseAdapter"),
 }
 
 
