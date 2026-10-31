@@ -2,13 +2,6 @@ name: Booking Catch-Up
 
 on:
   workflow_dispatch:
-    inputs:
-      delete_existing:
-        description: "Delete every published post on this Page, then rebuild from the current roster"
-        type: boolean
-        required: true
-        default: false
-
 permissions:
   contents: read
 
@@ -33,12 +26,9 @@ jobs:
         id: plan
         env:
           SELECTED_REF: ${{ github.ref }}
-          DELETE_EXISTING: ${{ inputs.delete_existing }}
         run: |
           python3 - <<'PY'
           import json, os
-          if os.environ['DELETE_EXISTING'].lower() != 'true':
-              raise SystemExit('Select delete_existing to authorize removal of existing Page posts and roster reposting.')
           if os.environ['SELECTED_REF'] != 'refs/heads/main':
               raise SystemExit('Choose main after merging the update so existing posting history is available.')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as target:
@@ -95,12 +85,7 @@ jobs:
           META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
           META_GRAPH_VERSION: ${{ vars.META_GRAPH_VERSION || 'v26.0' }}
           MAX_AGE_DAYS: '0'
-        run: |
-          if [ "${{ matrix.batch }}" = "1" ]; then
-            python -m core.catchup_runner --delete-existing-page-posts
-          else
-            python -m core.catchup_runner
-          fi
+        run: python -m core.catchup_runner
       - name: Back up this batch even after a partial failure
         id: backup
         if: always() && steps.pending.outputs.run == 'true' && steps.database.outcome == 'success' && hashFiles('autopost.db') != ''
