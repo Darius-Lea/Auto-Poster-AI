@@ -105,7 +105,7 @@ def process_city(city: dict, conn: sqlite3.Connection, args, results: dict, erro
         if limit is not None and args.attempted >= limit:
             break
         if kind == "case" and not posting_cadence.is_due(conn):
-            log.info("Skipping Fort Wayne case notice; the 48-hour posting interval has not elapsed")
+            log.info("Skipping Fort Wayne case notice; the 24-hour posting interval has not elapsed")
             continue
         if kind in ("warrant", "case") and not args.dry_run and source.get("verified") is not True:
             label = "Wanted" if kind == "warrant" else "Case"
