@@ -17,18 +17,13 @@ BOOKING_AREA = (
     "Leo-Cedarville, Grabill, Woodburn, and nearby communities."
 )
 BOOKING_FOLLOW = (
-    "Follow this Page for source-linked Allen County booking and roster-status updates."
+    "Follow this Page for Allen County booking and roster-status updates."
 )
 BOOKING_TAGS = "#FortWayne #AllenCounty"
 
 
-def _booking_local_context(text: str, source_url: str) -> str:
-    return (
-        f"{BOOKING_AREA}\n\n{text}\n\n"
-        f"Public record source: {source_url}\n"
-        f"{BOOKING_FOLLOW}\n\n{BOOKING_TAGS}"
-    )
-
+def _booking_local_context(text: str) -> str:
+    return f"{BOOKING_AREA}\n\n{text}\n\n{BOOKING_FOLLOW}\n\n{BOOKING_TAGS}"
 MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 SYSTEM_PROMPT = (
@@ -48,13 +43,12 @@ def _fallback(record: Record) -> str:
             f"Allen County’s Sheriff-linked wanted roster lists {record.name}{age} as wanted in connection with {record.charge}. "
             f"The listing covers Allen County, including Fort Wayne, New Haven, Huntertown, Leo-Cedarville, Grabill, and Woodburn. "
             f"Please send tips to law enforcement; do not approach. Listing status can change. {DISCLAIMER}\n\n"
-            f"Public record source: {record.source_url}\n"
-            "Follow this Page for source-linked Allen County wanted-list updates.\n\n"
+            "Follow this Page for Allen County wanted-list updates.\n\n"
             "#AllenCounty #FortWayne #Indiana"
         )
     text = (f"{record.name}{age} was listed in public records for {record.charge} "
             f"(date: {record.booking_date or 'not stated'}). {DISCLAIMER}")
-    return _booking_local_context(text, record.source_url)
+    return _booking_local_context(text)
 
 
 def make_caption(record: Record, city_name: str) -> str:
@@ -81,7 +75,7 @@ def make_caption(record: Record, city_name: str) -> str:
             return _fallback(record)
         if DISCLAIMER not in text:
             text = f"{text} {DISCLAIMER}"
-        return _booking_local_context(text, record.source_url)
+        return _booking_local_context(text)
     except Exception as exc:
         log.warning("Gemini caption failed (%s); using template", exc)
         return _fallback(record)
