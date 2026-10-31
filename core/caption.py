@@ -67,7 +67,7 @@ def _case_caption(record: Record) -> str:
         tags.append("#UnsolvedCase")
         action = "If you have firsthand information, use the case page's tip instructions to reach investigators."
     caption = (
-        f"FORT WAYNE POLICE DEPARTMENT CASE LISTING — ALLEN COUNTY, INDIANA\n\n"
+        f"COLD CASE OF THE DAY — FORT WAYNE, ALLEN COUNTY, INDIANA\n\n"
         f"Solve the Case lists {record.name} in an open {notice} (Case #{record.booking_date}) in Fort Wayne. "
         f"Listing status can change. {action}\n\n"
         f"Case details and tip instructions: {record.source_url}\n\n"
