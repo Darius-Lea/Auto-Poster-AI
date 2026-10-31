@@ -11,6 +11,15 @@ from adapters.base import Record
 log = logging.getLogger("core.caption")
 
 DISCLAIMER = "All individuals are presumed innocent until proven guilty."
+BOOKING_LOCATION = "Fort Wayne & Allen County, Indiana"
+BOOKING_TAGS = "#FortWayne #AllenCounty"
+
+
+def _booking_local_context(text: str) -> str:
+    if BOOKING_LOCATION in text and BOOKING_TAGS in text:
+        return text
+    return f"{BOOKING_LOCATION} booking update\\n\\n{text}\\n\\n{BOOKING_TAGS}"
+
 MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 SYSTEM_PROMPT = (
@@ -32,8 +41,9 @@ def _fallback(record: Record) -> str:
             f"Source: {record.source_url}. Listing status can change. {DISCLAIMER}\n"
             "#AllenCounty #Indiana"
         )
-    return (f"{record.name}{age} was listed in public records for {record.charge} "
+    text = (f"{record.name}{age} was listed in public records for {record.charge} "
             f"(date: {record.booking_date or 'not stated'}). {DISCLAIMER}")
+    return _booking_local_context(text)
 
 
 def make_caption(record: Record, city_name: str) -> str:
@@ -60,7 +70,7 @@ def make_caption(record: Record, city_name: str) -> str:
             return _fallback(record)
         if DISCLAIMER not in text:
             text = f"{text} {DISCLAIMER}"
-        return text
+        return _booking_local_context(text)
     except Exception as exc:
         log.warning("Gemini caption failed (%s); using template", exc)
         return _fallback(record)
