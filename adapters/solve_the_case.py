@@ -100,6 +100,8 @@ class SolveTheCaseAdapter(ScraperAdapter):
 
                 heading = detail.find("h1")
                 name = heading.get_text(" ", strip=True) if heading else name_hint
+                if seen and seen(name, item["case_number"], item["url"]):
+                    continue
                 match = CASE_KIND.search(text[:2500]) or CASE_KIND.search(item["title"])
                 if not name or not match:
                     self.errors.append(f"Skipped case {item['case_number']}: missing a clear name or case type")
