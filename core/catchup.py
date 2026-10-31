@@ -108,7 +108,7 @@ def _prepare(rows: list[dict], city: dict, hash_fields, folder: str) -> tuple[li
         detail = parse_detail(response.text)
         record = Record(row['name'], '; '.join(detail['charges']) or NO_CHARGE_TEXT,
                         row['booking_date'], row['detail_url'], row['image_url'], age=detail['age'])
-        caption = f"{_fallback(record)}\nSource: {record.source_url}"
+        caption = _fallback(record)
         downloaded = download_image(record.image_url, referer=record.source_url)
         if not downloaded:
             raise RuntimeError(f"Image download failed for {record.name}")
@@ -291,6 +291,28 @@ def run_batch(city: dict, conn: sqlite3.Connection, client, hash_fields, *,
                     report['paused'] = True
                     report['errors'].append(f'Group {key}: post {post_id} accepted; local acknowledgement needs reconciliation')
                     break
+                try:
+                    client.publish_comment(post_id, grouped.render_comment(members))
+                except FacebookError as exc:
+                    note = f'Post {post_id} was published, but its booking comment was not confirmed: {exc}'
+                    report['notes'].append(note)
+                    log.warning(note)
+                else:
+                    cta = "Check the comments for this batch’s booking list."
+                    if grouped.DISCLAIMER in caption:
+                        caption_with_cta = caption.replace(
+                            grouped.DISCLAIMER,
+                            cta + "\\n\\n" + grouped.DISCLAIMER,
+                            1,
+                        )
+                    else:
+                        caption_with_cta = caption + "\\n\\n" + cta
+                    try:
+                        client.update_caption(post_id, caption_with_cta, expected_caption=caption)
+                    except Exception as exc:
+                        note = f'Post {post_id} has a booking comment, but the comments prompt could not be added: {exc}'
+                        report['notes'].append(note)
+                        log.warning(note)
                 log.info('Confirmed catch-up post %s with %d bookings', post_id, len(members))
         except Exception as exc:
             report['errors'].append(f'Group preparation failed: {exc}')
