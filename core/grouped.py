@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 
 STATUSES = {"pending", "published", "uncertain", "failed"}
-TITLE = "ALLEN COUNTY JAIL ROSTER — BOOKING GROUP"
+TITLE = "FORT WAYNE, INDIANA — ALLEN COUNTY JAIL ROSTER"
 STATUS_NOTE = "(UPDATE: NO LONGER LISTED IN ALLEN COUNTY JAIL)"
 DISCLAIMER = "All individuals are presumed innocent until proven guilty."
 LOCAL_TIME = ZoneInfo("America/Indiana/Indianapolis")
