@@ -175,6 +175,33 @@ class FacebookClient:
             )
         return reference
 
+    def publish_comment(self, post_ref: str, message: str) -> str:
+        """Publish one comment on a confirmed post belonging to this Page."""
+        reference, field = self._target(post_ref)
+        if field != "message" or "_" not in reference:
+            raise FacebookError("Comments can only be added to a confirmed Page post.")
+        if not isinstance(message, str) or not message.strip():
+            raise FacebookError("A non-empty comment is required.")
+        try:
+            response = requests.post(
+                f"https://graph.facebook.com/{self.version}/{reference}/comments",
+                headers=self._headers, data={"message": message},
+                timeout=(10, 30), allow_redirects=False,
+            )
+        except requests.RequestException as exc:
+            raise FacebookDeliveryUnknown(
+                f"Facebook comment response was lost ({type(exc).__name__}); "
+                "check the post before retrying."
+            ) from None
+        payload = self._decode(response, upload=True)
+        comment_id = payload.get("id")
+        if not isinstance(comment_id, str) or not re.fullmatch(r"[0-9]+(?:_[0-9]+)?", comment_id):
+            raise FacebookDeliveryUnknown(
+                "Facebook accepted the comment request without a usable comment ID; "
+                "check the post before retrying."
+            )
+        return comment_id
+
     def publish_group(self, items: list[dict], group_caption: str) -> dict:
         """Publish up to ten individually captioned photos as one Page post.
 
