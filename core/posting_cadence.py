@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import sqlite3
 
-CASE_INTERVAL = timedelta(hours=24)
+CASE_INTERVAL = timedelta(hours=48)
 CASE_KEY = "fort-wayne-open-case"
 
 
