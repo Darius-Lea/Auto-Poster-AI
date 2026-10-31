@@ -6,10 +6,11 @@ on:
     # job selects the right UTC schedule for daylight or standard time.
     - cron: "17 13,17,23 * * *"
     - cron: "17 0,14,18 * * *"
-    # Hourly custody check; scheduled_mode routes this to status-only.
+    # Poll bookings and custody on a frequent schedule; at most one new booking per run.
+    - cron: "*/15 * * * *"
+    # Daily custody scan fallback.
     - cron: "17 12 * * *"
     - cron: "17 13 * * *"
-    - cron: "0 * * * *"
     # One wanted post at 4:17 p.m., separately gated until the source is verified.
     - cron: "17 20 * * *"
     - cron: "17 21 * * *"
