@@ -14,12 +14,15 @@ on:
     # One Allen County Fugitive of the Day post at 4:17 p.m. Fort Wayne time.
     - cron: "17 20 * * *"
     - cron: "17 21 * * *"
+    # Daily case check; persistent database cooldown allows a post only every 48 hours.
+    - cron: "17 22 * * *"
+    - cron: "17 23 * * *"
   workflow_dispatch:
     inputs:
       mode:
         description: "Preview skips publishing; check-facebook only checks Page identity"
         type: choice
-        options: [preview, check-facebook, publish, preview-status, check-status]
+        options: [preview, check-facebook, publish, publish-case, preview-status, check-status]
         default: preview
       limit:
         description: "Maximum records attempted in this run"
@@ -28,7 +31,7 @@ on:
       source_type:
         description: "Booking roster or warrants (warrants require a verified configured source)"
         type: choice
-        options: [booking, warrant, all]
+        options: [booking, warrant, case, all]
         default: booking
 
 permissions:
@@ -131,6 +134,7 @@ jobs:
             preview) python main.py --dry-run --limit "$RUN_LIMIT" --source-type "$SOURCE_TYPE" ;;
             publish) python main.py --limit "$RUN_LIMIT" --source-type "$SOURCE_TYPE" ;;
             publish-wanted) python main.py --limit 1 --source-type warrant ;;
+            publish-case) python main.py --limit 1 --source-type case ;;
             preview-status) python main.py --check-status --dry-run ;;
             check-status) python main.py --check-status ;;
             publish-and-check)
