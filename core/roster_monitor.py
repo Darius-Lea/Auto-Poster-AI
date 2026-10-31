@@ -14,6 +14,15 @@ from core import custody
 log = logging.getLogger("core.roster_monitor")
 LOCAL_TIME = ZoneInfo("America/Indiana/Indianapolis")
 STATUS_NOTE = "UPDATE: (RELEASED)"
+BOOKING_LOCATION = "Fort Wayne & Allen County, Indiana"
+BOOKING_TAGS = "#FortWayne #AllenCounty"
+
+
+def localize_caption(current: str) -> str:
+    if BOOKING_LOCATION in current:
+        return current
+    return f"{BOOKING_LOCATION} booking update\\n{BOOKING_TAGS}\\n\\n{current}"
+
 MANAGED_NOTE = re.compile(
     r"\n\n(?:\(UPDATE: NO LONGER LISTED IN ALLEN COUNTY JAIL\)|UPDATE: \(RELEASED\))"
     r"(?:\nFor custody information: Allen County Jail \(260\) 449-7376\.)?"
@@ -99,6 +108,23 @@ def reconcile_city(city: dict, conn: sqlite3.Connection, client, hash_fields,
                     log.warning("%s earlier confirmed posts have no roster/source mapping; "
                                 "they cannot be updated automatically", unmapped)
                 candidates = custody.observe(work, key, set(members), clock)
+                tracked = work.execute(
+                    "SELECT remote_ref FROM custody_posts WHERE source_key=? AND destination=?",
+                    (key, destination),
+                ).fetchall()
+                for (remote_ref,) in tracked:
+                    try:
+                        current = client.get_caption(remote_ref)
+                        caption = localize_caption(current)
+                        if caption == current:
+                            continue
+                        report["planned"] += 1
+                        if dry_run:
+                            continue
+                        client.update_caption(remote_ref, caption, expected_caption=current)
+                        report["updated"] += 1
+                    except Exception as exc:
+                        report["errors"].append(f"Post {remote_ref}: {exc}")
                 observation = work.execute("SELECT checked_at FROM custody_scans WHERE source_key=?", (key,)).fetchone()
                 accepted = observation and datetime.fromisoformat(observation[0]) == clock.astimezone(timezone.utc)
             except Exception as exc:
