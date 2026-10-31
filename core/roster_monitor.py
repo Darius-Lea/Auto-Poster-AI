@@ -20,29 +20,29 @@ BOOKING_AREA = (
     "Leo-Cedarville, Grabill, Woodburn, and nearby communities."
 )
 BOOKING_FOLLOW = (
-    "Follow this Page for source-linked Allen County booking and roster-status updates."
+    "Follow this Page for Allen County booking and roster-status updates."
 )
 BOOKING_TAGS = "#FortWayne #AllenCounty"
 
 
-def localize_caption(current: str, source_url: str) -> str:
+def localize_caption(current: str) -> str:
+    # Remove only the source labels this application added previously.
+    cleaned = re.sub(r"(?m)^Public record source: https?://[^\\s]+\\n?", "", current)
+    cleaned = re.sub(r"(?m)^(Roster checked: [^\\n]+)\\nSource: https?://[^\\s]+$", r"\\1", cleaned)
     additions = []
-    if BOOKING_AREA not in current:
+    if BOOKING_AREA not in cleaned:
         additions.append(BOOKING_AREA)
-    if source_url and source_url not in current:
-        additions.append(f"Public record source: {source_url}")
-    if BOOKING_FOLLOW not in current:
+    if BOOKING_FOLLOW not in cleaned:
         additions.append(BOOKING_FOLLOW)
-    if BOOKING_TAGS not in current:
+    if BOOKING_TAGS not in cleaned:
         additions.append(BOOKING_TAGS)
     if not additions:
-        return current
-    return "\n".join(additions) + "\n\n" + current
-
+        return cleaned
+    return "\\n".join(additions) + "\\n\\n" + cleaned
 MANAGED_NOTE = re.compile(
     r"\n\n(?:\(UPDATE: NO LONGER LISTED IN ALLEN COUNTY JAIL\)|UPDATE: \(RELEASED\))"
     r"(?:\nFor custody information: Allen County Jail \(260\) 449-7376\.)?"
-    r"\nRoster checked: [^\n]+\nSource: https?://[^\s]+"
+    r"\nRoster checked: [^\n]+(?:\nSource: https?://[^\s]+)?"
 )
 
 
@@ -62,8 +62,7 @@ def status_caption(current: str, candidate: dict) -> str:
     checked = datetime.fromisoformat(candidate["status_changed_at"]).astimezone(LOCAL_TIME)
     return (f"{base}\n\n{STATUS_NOTE}\n"
             f"For custody information: Allen County Jail (260) 449-7376.\n"
-            f"Roster checked: {checked:%Y-%m-%d %I:%M %p %Z}\n"
-            f"Source: {candidate['source_url']}")
+            f"Roster checked: {checked:%Y-%m-%d %I:%M %p %Z}")
 
 
 def reconcile_city(city: dict, conn: sqlite3.Connection, client, hash_fields,
