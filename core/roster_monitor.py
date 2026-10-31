@@ -37,7 +37,7 @@ def localize_caption(current: str, source_url: str) -> str:
         additions.append(BOOKING_TAGS)
     if not additions:
         return current
-    return "\\n".join(additions) + "\\n\\n" + current
+    return "\n".join(additions) + "\n\n" + current
 
 MANAGED_NOTE = re.compile(
     r"\n\n(?:\(UPDATE: NO LONGER LISTED IN ALLEN COUNTY JAIL\)|UPDATE: \(RELEASED\))"
