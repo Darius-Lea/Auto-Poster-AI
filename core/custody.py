@@ -100,7 +100,7 @@ def observe(conn: sqlite3.Connection, source_key: str, members: set[str],
     """Accept a complete hourly snapshot and derive safe caption-update work.
 
     Empty snapshots and declines exceeding 20% require investigation. Two
-    accepted missing observations, at least 20 hours apart, are needed before
+    accepted missing observations, at least 55 minutes apart, are needed before
     recording disappearance. Rejected or too-frequent scans change no history.
     """
     current = _utc(now)
