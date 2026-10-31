@@ -94,6 +94,10 @@ def main() -> int:
                              f"This batch published {report['groups_published']} grouped post(s), "
                              f"covering {report['people_published']} people. "
                              f"Remaining current bookings: {report['remaining']}.\n")
+                if report.get("notes"):
+                    target.write("\\n\\nNotes:\\n")
+                    for note in report["notes"]:
+                        target.write(f"- {note}\\n")
         return 1 if state["status"] == "paused" else 0
     finally:
         conn.close()
