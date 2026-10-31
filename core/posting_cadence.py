@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import sqlite3
 
-CASE_INTERVAL = timedelta(hours=48)
+CASE_INTERVAL = timedelta(hours=24)
 CASE_KEY = "fort-wayne-open-case"
 
 
@@ -34,7 +34,7 @@ def is_due(conn: sqlite3.Connection, key: str = CASE_KEY,
 
 def reserve_attempt(conn: sqlite3.Connection, key: str = CASE_KEY,
                     now: datetime | None = None) -> None:
-    """Start the 48-hour window before upload so ambiguous responses cannot double-post."""
+    """Start the 24-hour window before upload so ambiguous responses cannot double-post."""
     current = now or datetime.now(timezone.utc)
     if current.utcoffset() is None:
         raise ValueError("Cadence time must be timezone-aware")
