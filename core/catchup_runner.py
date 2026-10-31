@@ -35,7 +35,6 @@ def main() -> int:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--inspect-only", action="store_true")
     mode.add_argument("--verify-complete", action="store_true")
-    mode.add_argument("--delete-existing-page-posts", action="store_true")
     args = parser.parse_args()
     path = os.getenv("AUTOPOST_DB", "autopost.db")
     workspace = os.getenv("CATCHUP_WORKSPACE", "fort-wayne")
@@ -74,15 +73,6 @@ def main() -> int:
     try:
         grouped.initialize(conn)
         catchup_control.initialize(conn)
-        if args.delete_existing_page_posts:
-            client.check_page()
-            deleted = client.delete_all_published_page_posts()
-            with conn:
-                conn.execute("DELETE FROM deliveries WHERE destination=?", (destination,))
-                conn.execute("DELETE FROM custody_posts WHERE destination=?", (destination,))
-                conn.execute("DELETE FROM booking_groups WHERE destination=?", (destination,))
-                conn.execute("DELETE FROM catchup_controls WHERE destination=?", (destination,))
-            print(f"Deleted {deleted} published Page posts and reset this workspace's delivery history.")
         state = catchup_control.begin(conn, destination, session)
         if state["status"] == "completed":
             return 0
