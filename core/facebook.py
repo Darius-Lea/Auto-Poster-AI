@@ -86,57 +86,6 @@ class FacebookClient:
             raise FacebookError("Facebook did not confirm the configured Page ID; verify the Page token and ID.")
         return payload
 
-    def delete_all_published_page_posts(self) -> int:
-        """Delete every published feed post owned by this Page.
-
-        Requires a Page token with the pages_manage_posts permission. Pagination
-        uses Graph cursors rather than following arbitrary URLs.
-        """
-        endpoint = self._url + "/published_posts"
-        params = {"fields": "id,from{id}", "limit": 100}
-        deleted = 0
-        seen_cursors = set()
-        while True:
-            try:
-                response = requests.get(endpoint, headers=self._headers, params=params,
-                                        timeout=(10, 30), allow_redirects=False)
-            except requests.RequestException as exc:
-                raise FacebookError(f"Could not list Page posts ({type(exc).__name__}); deletion stopped.") from None
-            payload = self._decode(response, upload=False)
-            posts = payload.get("data")
-            if not isinstance(posts, list):
-                raise FacebookError("Facebook returned an invalid published-post list; deletion stopped.")
-            for post in posts:
-                if not isinstance(post, dict) or not isinstance(post.get("id"), str):
-                    raise FacebookError("Facebook returned a post without an ID; deletion stopped.")
-                owner = post.get("from")
-                if not isinstance(owner, dict) or str(owner.get("id", "")) != self.page_id:
-                    raise FacebookError("A listed post was not confirmed as owned by this Page; deletion stopped.")
-                try:
-                    result = requests.delete(
-                        f"https://graph.facebook.com/{self.version}/{post['id']}",
-                        headers=self._headers, timeout=(10, 30), allow_redirects=False,
-                    )
-                except requests.RequestException as exc:
-                    raise FacebookDeliveryUnknown(
-                        f"Delete response was lost for Page post {post['id']} ({type(exc).__name__}); "
-                        "inspect the Page before retrying."
-                    ) from None
-                confirmation = self._decode(result, upload=False)
-                if confirmation.get("success") is not True:
-                    raise FacebookError(f"Facebook did not confirm deletion of Page post {post['id']}.")
-                deleted += 1
-            paging = payload.get("paging") or {}
-            cursors = paging.get("cursors") if isinstance(paging, dict) else None
-            after = cursors.get("after") if isinstance(cursors, dict) else None
-            if not after or not paging.get("next"):
-                break
-            if after in seen_cursors:
-                raise FacebookError("Facebook repeated a paging cursor; deletion stopped.")
-            seen_cursors.add(after)
-            params = {"fields": "id,from{id}", "limit": 100, "after": after}
-        return deleted
-
     def _target(self, remote_ref: str) -> tuple[str, str]:
         """Resolve a stored photo/post reference without accepting paths or URLs."""
         if not isinstance(remote_ref, str):
