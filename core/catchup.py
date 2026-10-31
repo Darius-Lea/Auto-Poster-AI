@@ -306,7 +306,7 @@ def run_batch(city: dict, conn: sqlite3.Connection, client, hash_fields, *,
                             1,
                         )
                     else:
-                        caption_with_cta = caption + "\\n\\n" + cta
+                        caption_with_cta = caption + "\n\n" + cta
                     try:
                         client.update_caption(post_id, caption_with_cta, expected_caption=caption)
                     except Exception as exc:
