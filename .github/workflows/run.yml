@@ -29,7 +29,7 @@ on:
         type: number
         default: 1
       source_type:
-        description: "Booking roster or warrants (warrants require a verified configured source)"
+        description: "Booking, warrant, case listing, or all configured sources"
         type: choice
         options: [booking, warrant, case, all]
         default: booking
