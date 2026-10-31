@@ -9,13 +9,14 @@ import sqlite3
 from zoneinfo import ZoneInfo
 
 from adapters.base import get_adapter
-from core import custody, group_monitor
+from core import custody
 
 log = logging.getLogger("core.roster_monitor")
 LOCAL_TIME = ZoneInfo("America/Indiana/Indianapolis")
-STATUS_NOTE = "(UPDATE: NO LONGER LISTED IN ALLEN COUNTY JAIL)"
+STATUS_NOTE = "(UPDATE: RELEASED FROM ALLEN COUNTY JAIL)"
 MANAGED_NOTE = re.compile(
-    r"\n\n\(UPDATE: NO LONGER LISTED IN ALLEN COUNTY JAIL\)"
+    r"\n\n\(UPDATE: (?:NO LONGER LISTED IN ALLEN COUNTY JAIL|RELEASED FROM ALLEN COUNTY JAIL)\)"
+    r"(?:\nFor custody information: Allen County Jail \(260\) 449-7376\.)?"
     r"\nRoster checked: [^\n]+\nSource: https?://[^\s]+"
 )
 
@@ -35,6 +36,7 @@ def status_caption(current: str, candidate: dict) -> str:
         raise ValueError("Unsupported roster status")
     checked = datetime.fromisoformat(candidate["status_changed_at"]).astimezone(LOCAL_TIME)
     return (f"{base}\n\n{STATUS_NOTE}\n"
+            f"For custody information: Allen County Jail (260) 449-7376.\n"
             f"Roster checked: {checked:%Y-%m-%d %I:%M %p %Z}\n"
             f"Source: {candidate['source_url']}")
 
@@ -123,11 +125,6 @@ def reconcile_city(city: dict, conn: sqlite3.Connection, client, hash_fields,
                              candidate["remote_ref"], candidate["target_status"])
                 except Exception as exc:
                     report["errors"].append(f"Post {candidate['remote_ref']}: {exc}")
-            if not dry_run and accepted:
-                grouped_report = group_monitor.sync(work, client, key, destination, source["url"], clock)
-                report["updated"] += grouped_report["updated"]
-                report["planned"] += grouped_report["updated"]
-                report["errors"].extend(grouped_report["errors"])
         if not supported:
             report["errors"].append("No Allen County roster source configured for daily checks")
     finally:
