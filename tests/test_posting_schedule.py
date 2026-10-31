@@ -8,7 +8,7 @@ import unittest
 
 from core.posting_schedule import (
     DAYLIGHT_CRON, STANDARD_CRON, STATUS_DAYLIGHT_CRON, STATUS_STANDARD_CRON,
-    WANTED_DAYLIGHT_CRON, WANTED_STANDARD_CRON,
+    WANTED_DAYLIGHT_CRON, WANTED_STANDARD_CRON, FREQUENT_BOOKING_CRON,
     FORT_WAYNE, allow_run, scheduled_mode,
 )
 
@@ -59,6 +59,14 @@ class PostingScheduleTests(unittest.TestCase):
                 self.assertEqual(scheduled_mode("schedule", posting, now), "publish")
                 self.assertEqual(scheduled_mode("schedule", wrong_status, now), "")
                 self.assertEqual(scheduled_mode("schedule", "unexpected", now), "")
+
+    def test_frequent_cron_publishes_and_checks_in_both_seasons(self):
+        for month in (1, 7):
+            with self.subTest(month=month):
+                now = datetime(2026, month, 15, 12, tzinfo=timezone.utc)
+                self.assertEqual(scheduled_mode("schedule", FREQUENT_BOOKING_CRON, now),
+                                 "publish-and-check")
+                self.assertTrue(allow_run("schedule", FREQUENT_BOOKING_CRON, now))
 
     def test_cli_writes_both_guard_and_mode_outputs(self):
         with tempfile.TemporaryDirectory() as folder:
