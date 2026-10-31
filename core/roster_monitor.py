@@ -15,13 +15,29 @@ log = logging.getLogger("core.roster_monitor")
 LOCAL_TIME = ZoneInfo("America/Indiana/Indianapolis")
 STATUS_NOTE = "UPDATE: (RELEASED)"
 BOOKING_LOCATION = "Fort Wayne & Allen County, Indiana"
+BOOKING_AREA = (
+    "Allen County booking update for Fort Wayne, New Haven, Huntertown, "
+    "Leo-Cedarville, Grabill, Woodburn, and nearby communities."
+)
+BOOKING_FOLLOW = (
+    "Follow this Page for source-linked Allen County booking and roster-status updates."
+)
 BOOKING_TAGS = "#FortWayne #AllenCounty"
 
 
-def localize_caption(current: str) -> str:
-    if BOOKING_LOCATION in current:
+def localize_caption(current: str, source_url: str) -> str:
+    additions = []
+    if BOOKING_AREA not in current:
+        additions.append(BOOKING_AREA)
+    if source_url and source_url not in current:
+        additions.append(f"Public record source: {source_url}")
+    if BOOKING_FOLLOW not in current:
+        additions.append(BOOKING_FOLLOW)
+    if BOOKING_TAGS not in current:
+        additions.append(BOOKING_TAGS)
+    if not additions:
         return current
-    return f"{BOOKING_LOCATION} booking update\\n{BOOKING_TAGS}\\n\\n{current}"
+    return "\\n".join(additions) + "\\n\\n" + current
 
 MANAGED_NOTE = re.compile(
     r"\n\n(?:\(UPDATE: NO LONGER LISTED IN ALLEN COUNTY JAIL\)|UPDATE: \(RELEASED\))"
@@ -115,7 +131,7 @@ def reconcile_city(city: dict, conn: sqlite3.Connection, client, hash_fields,
                 for (remote_ref,) in tracked:
                     try:
                         current = client.get_caption(remote_ref)
-                        caption = localize_caption(current)
+                        caption = localize_caption(current, source["url"])
                         if caption == current:
                             continue
                         report["planned"] += 1
