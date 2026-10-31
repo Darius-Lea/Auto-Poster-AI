@@ -79,7 +79,9 @@ class RosterMonitorTests(unittest.TestCase):
         # An editor's changes to the booking remain when the roster listing returns.
         self.captions['123_456'] = self.captions['123_456'].replace(self.original, 'Editor corrected booking text.')
         self.assertEqual(self.run_day(4)['updated'], 1)
-        self.assertEqual(self.captions['123_456'], 'Editor corrected booking text.')
+        self.assertTrue(self.captions['123_456'].endswith('Editor corrected booking text.'))
+        self.assertIn('Fort Wayne, New Haven, Huntertown', self.captions['123_456'])
+        self.assertNotIn(STATUS_NOTE, self.captions['123_456'])
         self.client.publish_photo.assert_not_called()
         self.client.delete.assert_not_called()
 
