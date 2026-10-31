@@ -12,13 +12,22 @@ log = logging.getLogger("core.caption")
 
 DISCLAIMER = "All individuals are presumed innocent until proven guilty."
 BOOKING_LOCATION = "Fort Wayne & Allen County, Indiana"
+BOOKING_AREA = (
+    "Allen County booking update for Fort Wayne, New Haven, Huntertown, "
+    "Leo-Cedarville, Grabill, Woodburn, and nearby communities."
+)
+BOOKING_FOLLOW = (
+    "Follow this Page for source-linked Allen County booking and roster-status updates."
+)
 BOOKING_TAGS = "#FortWayne #AllenCounty"
 
 
-def _booking_local_context(text: str) -> str:
-    if BOOKING_LOCATION in text and BOOKING_TAGS in text:
-        return text
-    return f"{BOOKING_LOCATION} booking update\n\n{text}\n\n{BOOKING_TAGS}"
+def _booking_local_context(text: str, source_url: str) -> str:
+    return (
+        f"{BOOKING_AREA}\n\n{text}\n\n"
+        f"Public record source: {source_url}\n"
+        f"{BOOKING_FOLLOW}\n\n{BOOKING_TAGS}"
+    )
 
 MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
@@ -43,7 +52,7 @@ def _fallback(record: Record) -> str:
         )
     text = (f"{record.name}{age} was listed in public records for {record.charge} "
             f"(date: {record.booking_date or 'not stated'}). {DISCLAIMER}")
-    return _booking_local_context(text)
+    return _booking_local_context(text, record.source_url)
 
 
 def make_caption(record: Record, city_name: str) -> str:
@@ -70,7 +79,7 @@ def make_caption(record: Record, city_name: str) -> str:
             return _fallback(record)
         if DISCLAIMER not in text:
             text = f"{text} {DISCLAIMER}"
-        return _booking_local_context(text)
+        return _booking_local_context(text, record.source_url)
     except Exception as exc:
         log.warning("Gemini caption failed (%s); using template", exc)
         return _fallback(record)
