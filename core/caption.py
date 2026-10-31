@@ -44,11 +44,13 @@ def _fallback(record: Record) -> str:
     age = f", {record.age}," if record.age else ""
     if record.kind == "warrant":
         return (
-            f"MOST WANTED FUGITIVE OF THE DAY\n\n"
-            f"In Allen County, the Sheriff-linked source lists {record.name}{age} as wanted in connection with {record.charge}. "
-            f"Please send tips to law enforcement; do not approach. "
-            f"Source: {record.source_url}. Listing status can change. {DISCLAIMER}\n"
-            "#AllenCounty #Indiana"
+            f"MOST WANTED FUGITIVE OF THE DAY — ALLEN COUNTY, INDIANA\n\n"
+            f"Allen County’s Sheriff-linked wanted roster lists {record.name}{age} as wanted in connection with {record.charge}. "
+            f"The listing covers Allen County, including Fort Wayne, New Haven, Huntertown, Leo-Cedarville, Grabill, and Woodburn. "
+            f"Please send tips to law enforcement; do not approach. Listing status can change. {DISCLAIMER}\n\n"
+            f"Public record source: {record.source_url}\n"
+            "Follow this Page for source-linked Allen County wanted-list updates.\n\n"
+            "#AllenCounty #FortWayne #Indiana"
         )
     text = (f"{record.name}{age} was listed in public records for {record.charge} "
             f"(date: {record.booking_date or 'not stated'}). {DISCLAIMER}")
