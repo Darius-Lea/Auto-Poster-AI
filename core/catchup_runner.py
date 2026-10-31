@@ -95,9 +95,9 @@ def main() -> int:
                              f"covering {report['people_published']} people. "
                              f"Remaining current bookings: {report['remaining']}.\n")
                 if report.get("notes"):
-                    target.write("\\n\\nNotes:\\n")
+                    target.write("\n\nNotes:\n")
                     for note in report["notes"]:
-                        target.write(f"- {note}\\n")
+                        target.write(f"- {note}\n")
         return 1 if state["status"] == "paused" else 0
     finally:
         conn.close()
