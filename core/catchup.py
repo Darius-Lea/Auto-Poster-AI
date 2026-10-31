@@ -302,7 +302,7 @@ def run_batch(city: dict, conn: sqlite3.Connection, client, hash_fields, *,
                     if grouped.DISCLAIMER in caption:
                         caption_with_cta = caption.replace(
                             grouped.DISCLAIMER,
-                            cta + "\\n\\n" + grouped.DISCLAIMER,
+                            cta + "\n\n" + grouped.DISCLAIMER,
                             1,
                         )
                     else:
