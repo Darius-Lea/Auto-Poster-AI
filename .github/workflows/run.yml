@@ -54,13 +54,11 @@ jobs:
         run: python3 -m core.posting_schedule
   run:
     needs: posting_window
-    # Preserve queue runs; opt in to scheduled Facebook posting after a manual test.
+    # Keep manual runs available and run configured scheduled Meta jobs automatically.
     if: >-
       needs.posting_window.outputs.run == 'true' &&
       (github.event_name == 'workflow_dispatch' ||
-       (vars.PUBLISH_BACKEND == 'meta' &&
-        (needs.posting_window.outputs.mode == 'check-status' ||
-         vars.AUTOPOST_ENABLED == 'true')) ||
+       vars.PUBLISH_BACKEND == 'meta' ||
        (needs.posting_window.outputs.mode == 'publish' && vars.PUBLISH_BACKEND != 'meta'))
     # Match the supported OS of the pinned Playwright release.
     runs-on: ubuntu-24.04
