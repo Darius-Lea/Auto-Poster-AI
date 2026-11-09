@@ -202,6 +202,35 @@ class FacebookClient:
             )
         return comment_id
 
+    def publish_message(self, message: str) -> str:
+        """Publish one text-only feed post on this Page; return its post ID.
+
+        Used for roster-status announcements when no photo is available. The
+        same delivery-outcome rules apply as for photo uploads: a lost or
+        ambiguous response is never treated as a failure that may be retried.
+        """
+        if not isinstance(message, str) or not message.strip():
+            raise FacebookError("A non-empty message is required.")
+        try:
+            response = requests.post(
+                self._url + "/feed", headers=self._headers, data={"message": message},
+                timeout=(10, 30), allow_redirects=False,
+            )
+        except requests.RequestException as exc:
+            raise FacebookDeliveryUnknown(
+                f"Facebook post response was lost ({type(exc).__name__}); "
+                "check the Page before retrying."
+            ) from None
+        payload = self._decode(response, upload=True)
+        post_id = payload.get("id")
+        if (not isinstance(post_id, str)
+                or not re.fullmatch(re.escape(self.page_id) + r"_[0-9]+", post_id)):
+            raise FacebookDeliveryUnknown(
+                "Facebook accepted the post request without a usable post ID; "
+                "check the Page before retrying."
+            )
+        return post_id
+
     def publish_group(self, items: list[dict], group_caption: str) -> dict:
         """Publish up to ten individually captioned photos as one Page post.
 
