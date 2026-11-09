@@ -168,7 +168,8 @@ def _failure_context(exc: Exception) -> str:
 
 
 def run_batch(city: dict, conn: sqlite3.Connection, client, hash_fields, *,
-              max_groups: int = 2, dry_run: bool = False, include_previous: bool = False) -> dict:
+              max_groups: int = 2, dry_run: bool = False, include_previous: bool = False,
+              group_size: int = GROUP_SIZE, full_only: bool = False) -> dict:
     """Attempt a bounded batch; completion means all eligible current rows are covered.
 
     The caller initializes delivery, custody and group schemas. Preview reads the
@@ -177,6 +178,12 @@ def run_batch(city: dict, conn: sqlite3.Connection, client, hash_fields, *,
     With explicit ``include_previous=True``, current individual delivery/custody
     rows are archived and replaced by new group receipts. Earlier group members
     are always skipped. No prior Facebook post is automatically deleted.
+
+    ``group_size`` sets how many bookings make one post (the Facebook group
+    limit is ten). With ``full_only=True`` a partial group is never published:
+    leftover bookings stay unpublished until enough new bookings arrive to
+    complete a full group. That is the ongoing booking flow; catch-up leaves
+    it off so a final partial group can finish the backlog.
     """
     report = {'groups_published': 0, 'people_published': 0, 'groups_planned': 0,
               'remaining': None, 'complete': False, 'errors': [], 'paused': False,
@@ -185,6 +192,10 @@ def run_batch(city: dict, conn: sqlite3.Connection, client, hash_fields, *,
         raise ValueError('max_groups must be a positive integer')
     if not isinstance(include_previous, bool):
         raise ValueError('include_previous must be a boolean')
+    if not isinstance(group_size, int) or isinstance(group_size, bool) or not 1 <= group_size <= 10:
+        raise ValueError('group_size must be an integer between one and ten')
+    if not isinstance(full_only, bool):
+        raise ValueError('full_only must be a boolean')
     destination = f"meta:{client.page_id}:{city['workspace_key']}"
     pending = [row for row in delivery.list_unresolved(conn) if row['destination'] == destination]
     unsettled_groups = [group for group in grouped.list_groups(conn, destination)
@@ -220,19 +231,25 @@ def run_batch(city: dict, conn: sqlite3.Connection, client, hash_fields, *,
             report['paused'] = True
             report['errors'].append(f'Could not archive prior individual delivery history: {exc}')
             return report
-    # Source order is retained; ten consecutive eligible bookings make a group.
+    # Source order is retained; consecutive eligible bookings make a group.
     eligible = [row for row in rows
                 if (identity := hash_fields(row['name'], row['booking_date'], row['detail_url'])) not in published_members
                 and (not delivery.blocked(conn, identity, destination)
                      or (include_previous and dry_run and identity in previous_hashes))]
     report['remaining'] = len(eligible)
-    report['groups_planned'] = min(max_groups, (len(eligible) + GROUP_SIZE - 1) // GROUP_SIZE)
+    if full_only:
+        report['groups_planned'] = min(max_groups, len(eligible) // group_size)
+    else:
+        report['groups_planned'] = min(max_groups, (len(eligible) + group_size - 1) // group_size)
     if dry_run:
-        report['complete'] = not eligible
+        report['complete'] = (len(eligible) < group_size) if full_only else (not eligible)
         return report
+    # In full-only mode the trailing partial group is held unpublished until
+    # enough new bookings arrive to complete it.
+    publishable = eligible[:len(eligible) // group_size * group_size] if full_only else eligible
     source_identity = source_key(city, source)
-    for offset in range(0, min(len(eligible), max_groups * GROUP_SIZE), GROUP_SIZE):
-        candidates = eligible[offset:offset + GROUP_SIZE]
+    for offset in range(0, min(len(publishable), max_groups * group_size), group_size):
+        candidates = publishable[offset:offset + group_size]
         try:
             with tempfile.TemporaryDirectory(prefix='autopost-catchup-') as folder:
                 members, images = _prepare(candidates, city, hash_fields, folder)
@@ -285,7 +302,8 @@ def run_batch(city: dict, conn: sqlite3.Connection, client, hash_fields, *,
                     for member, photo_id in zip(members, photo_ids):
                         delivery.complete(conn, member['hash'], destination, 'meta:' + photo_id)
                         custody.track(conn, member['hash'], destination, source_identity, photo_id,
-                                      member['caption'], member['source_url'], member['name'])
+                                      member['caption'], member['source_url'], member['name'],
+                                      image_url=member['image_url'], charge=member['charge'])
                 except Exception as exc:
                     _hold(conn, key, destination, f'Post accepted but local acknowledgement failed: {exc}')
                     report['paused'] = True
@@ -318,5 +336,11 @@ def run_batch(city: dict, conn: sqlite3.Connection, client, hash_fields, *,
             report['errors'].append(f'Group preparation failed: {exc}')
             break
     report['remaining'] = _remaining(conn, destination, rows, hash_fields)
-    report['complete'] = report['remaining'] == 0 and not report['errors'] and not report['paused']
+    if full_only:
+        # Held leftovers are expected, not a failure: the batch is complete
+        # when fewer than a full group of unpublished bookings remains.
+        report['complete'] = (report['remaining'] < group_size
+                              and not report['errors'] and not report['paused'])
+    else:
+        report['complete'] = report['remaining'] == 0 and not report['errors'] and not report['paused']
     return report
