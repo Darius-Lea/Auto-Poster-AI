@@ -255,6 +255,43 @@ class CatchupTests(unittest.TestCase):
                          before_custody + 10)
         self.assertEqual(self.conn.execute('SELECT COUNT(*) FROM catchup_replaced_deliveries').fetchone()[0], 0)
 
+    def test_full_only_batches_of_five_hold_the_partial_group(self):
+        for _ in range(4):
+            result = self.run_batch(max_groups=1, group_size=5, full_only=True)
+            self.assertEqual(result['groups_published'], 1)
+            self.assertEqual(result['people_published'], 5)
+            self.assertFalse(result['errors'])
+        self.assertEqual(self.client.publish_group.call_count, 4)
+        self.assertTrue(all(len(call.args[0]) == 5
+                            for call in self.client.publish_group.call_args_list))
+        self.assertEqual(self.conn.execute('SELECT COUNT(*) FROM custody_posts').fetchone()[0], 20)
+        # Three bookings remain: not enough for a full batch, so nothing posts.
+        held = self.run_batch(max_groups=1, group_size=5, full_only=True)
+        self.assertEqual(held['groups_published'], 0)
+        self.assertEqual(held['people_published'], 0)
+        self.assertEqual(held['remaining'], 3)
+        self.assertTrue(held['complete'])
+        self.assertEqual(self.client.publish_group.call_count, 4)
+
+    def test_full_only_waits_for_a_complete_group(self):
+        for row in self.rows[:19]:
+            identity = self.identity(row)
+            delivery.claim(self.conn, identity, self.destination)
+            delivery.complete(self.conn, identity, self.destination, 'meta:123_999')
+        result = self.run_batch(max_groups=1, group_size=5, full_only=True)
+        self.assertEqual(result['groups_published'], 0)
+        self.assertEqual(result['remaining'], 4)
+        self.assertTrue(result['complete'])
+        self.client.publish_group.assert_not_called()
+
+    def test_batch_size_options_are_validated(self):
+        with self.assertRaises(ValueError):
+            self.run_batch(group_size=0)
+        with self.assertRaises(ValueError):
+            self.run_batch(group_size=11)
+        with self.assertRaises(ValueError):
+            self.run_batch(full_only='yes')
+
     def test_include_previous_archive_and_canonical_removal_are_atomic(self):
         first = self.identity(self.rows[0])
         source = catchup.source_key(self.city, self.city['sources'][0])
