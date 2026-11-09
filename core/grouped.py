@@ -205,15 +205,29 @@ def groups_for_record(conn: sqlite3.Connection, record_hash: str, destination: s
 
 def render_caption(members: list[dict], statuses: dict[str, str] | None = None,
                    checked_at: datetime | None = None) -> str:
-    """Render a short local introduction; per-person details go in a roster comment."""
+    """Render the batch post with names and charges first.
+
+    The roster list is the hook of the post: every member is named with their
+    listed charges before the standard Page context lines. Status sections
+    for members who have since left the roster are appended after the
+    context, and the original member data is never altered.
+    """
     originals = _members(members)
     status_map = statuses or {}
     if any(status not in ("listed", "no_longer_listed") for status in status_map.values()):
         raise ValueError("Unsupported roster status")
     if checked_at is not None and checked_at.utcoffset() is None:
         raise ValueError("The roster check time must be timezone-aware")
+    count = len(originals)
+    noun = "INMATE" if count == 1 else "INMATES"
+    roster = [f"🚨 {count} NEW {noun} JUST BOOKED — ALLEN COUNTY JAIL 🚨"]
+    for index, member in enumerate(originals, start=1):
+        charge = " ".join(str(member.get("charge") or "").split())
+        detail = charge if charge else f"booking date: {member['booking_date']}"
+        roster.append(f"{index}. {member['name']} — {detail}")
     sections = [
         TITLE,
+        "\n".join(roster),
         "Allen County booking update for Fort Wayne, New Haven, Huntertown, "
         "Leo-Cedarville, Grabill, Woodburn, and nearby communities.",
         "Fort Wayne, Indiana • Allen County Sheriff’s Office",
@@ -242,7 +256,7 @@ def render_comment(members: list[dict]) -> str:
     for index, member in enumerate(_members(members), start=1):
         lines.append(f"{index}. {member['name']} — booking date: {member['booking_date']}.")
     lines.extend([
-        "Listed charges appear in each person’s photo caption.",
+        "Charges are listed in this post and in each person’s photo caption.",
         DISCLAIMER,
     ])
     return "\n".join(lines)

@@ -103,6 +103,22 @@ class CustodyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             custody.track(self.conn, 'person', 'meta:123:fort-wayne', 'allen', '123_999', 'caption', 'https://example/detail')
 
+    def test_track_retains_photo_and_charge_for_release_posts(self):
+        custody.track(self.conn, 'photo-person', 'meta:123:fort-wayne', 'allen',
+                      'meta:123_777', 'Caption', 'https://source.example/detail/9', 'Photo Fixture',
+                      image_url='https://source.example/photo/9.jpg', charge='Example charge')
+        row = self.conn.execute(
+            "SELECT image_url, charge FROM custody_posts WHERE record_hash = 'photo-person'"
+        ).fetchone()
+        self.assertEqual(row, ('https://source.example/photo/9.jpg', 'Example charge'))
+        # Re-tracking without the new fields keeps the retained values.
+        custody.track(self.conn, 'photo-person', 'meta:123:fort-wayne', 'allen',
+                      '123_777', 'Caption', 'https://source.example/detail/9', 'Photo Fixture')
+        row = self.conn.execute(
+            "SELECT image_url, charge FROM custody_posts WHERE record_hash = 'photo-person'"
+        ).fetchone()
+        self.assertEqual(row, ('https://source.example/photo/9.jpg', 'Example charge'))
+
     def test_naive_times_and_unsupported_status_are_rejected(self):
         with self.assertRaises(ValueError):
             custody.observe(self.conn, 'allen', self.members, datetime(2026, 10, 28))

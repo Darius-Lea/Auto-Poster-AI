@@ -17,7 +17,7 @@ load_dotenv()  # Adapter limits and DB settings are read during module import.
 from adapters._common import download_image
 from adapters.base import Record, get_adapter
 from core import caption as caption_mod
-from core import catchup_control, custody, delivery, grouped, notify, posting_cadence, publisher, roster_monitor, watermark
+from core import catchup, catchup_control, custody, delivery, grouped, notify, posting_cadence, publisher, release_posts, roster_monitor, watermark
 from core.facebook import FacebookClient, FacebookDeliveryUnknown, FacebookError
 
 DB_PATH = os.getenv("AUTOPOST_DB", "autopost.db")
@@ -64,6 +64,7 @@ def init_db() -> sqlite3.Connection:
     grouped.initialize(conn)
     catchup_control.initialize(conn)
     posting_cadence.initialize(conn)
+    release_posts.initialize(conn)
     return conn
 
 
@@ -158,7 +159,8 @@ def process_city(city: dict, conn: sqlite3.Connection, args, results: dict, erro
                     uploading = False
                     if destination.startswith("meta:") and source_kind(source) == "booking":
                         custody.track(conn, h, destination, roster_monitor.source_key(city, source),
-                                      ref, cap, rec.source_url, rec.name)
+                                      ref, cap, rec.source_url, rec.name,
+                                      image_url=rec.image_url, charge=rec.charge)
                     log.info("Delivery confirmed: %s -> %s", h, ref)
                 results[name].append({"name": rec.name, "charge": rec.charge, "image": stamped, "caption": cap})
             except FacebookDeliveryUnknown as exc:
@@ -182,6 +184,58 @@ def process_city(city: dict, conn: sqlite3.Connection, args, results: dict, erro
                     posting_cadence.clear_failed_attempt(conn)
 
 
+def booking_batch_size() -> int:
+    """Ongoing booking batch size from BOOKING_BATCH_SIZE; 0 disables batching."""
+    try:
+        size = int(os.getenv("BOOKING_BATCH_SIZE", "0"))
+    except ValueError:
+        return 0
+    return size if 1 <= size <= 10 else 0
+
+
+def release_posts_enabled() -> bool:
+    return os.getenv("RELEASE_POSTS_ENABLED", "true").strip().lower() not in ("0", "false", "no", "off")
+
+
+def run_booking_batch(city: dict, conn: sqlite3.Connection, args, results: dict,
+                      errors: dict, size: int) -> None:
+    """Publish one full batch of new bookings, or hold a partial batch.
+
+    While batching is enabled, bookings are never posted one at a time: the
+    batch engine publishes only a complete group of ``size`` and leaves the
+    rest unpublished until enough new bookings arrive to complete a group.
+    """
+    name = city["city"]
+    log = CityAdapter(logging.getLogger("main"), {"city": name})
+    results.setdefault(name, [])
+    errors.setdefault(name, [])
+    client = FacebookClient.from_env()
+    report = catchup.run_batch(city, conn, client, _hash, max_groups=1,
+                               dry_run=args.dry_run, group_size=size, full_only=True)
+    for note in report["notes"]:
+        log.info("%s", note)
+    if report["groups_published"]:
+        results[name].append({
+            "name": f"{report['people_published']} new inmates in one batch post",
+            "charge": "Allen County Jail bookings",
+            "image": "", "caption": "",
+        })
+        log.info("Published one batch post with %d bookings; %d still waiting",
+                 report["people_published"], report["remaining"])
+    if report["errors"]:
+        errors[name].extend(report["errors"])
+    elif not report["groups_published"]:
+        if args.dry_run:
+            if report["groups_planned"]:
+                log.info("DRY RUN: would publish one batch post of %d bookings", size)
+            else:
+                log.info("DRY RUN: %d booking(s) waiting; a batch post needs %d",
+                         report["remaining"], size)
+        else:
+            log.info("Holding %d booking(s); the next batch post goes out at %d",
+                     report["remaining"], size)
+
+
 def main() -> int:
     load_dotenv()
     global DB_PATH
@@ -194,7 +248,7 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="Scrape and caption, but do not publish")
     parser.add_argument("--dump-html", action="store_true", help="Save raw page HTML for selector debugging")
     parser.add_argument("--check-facebook", action="store_true", help="Read-only Page token and identity check; does not post")
-    parser.add_argument("--check-status", action="store_true", help="Check the current roster and update existing Facebook booking captions; no new posts")
+    parser.add_argument("--check-status", action="store_true", help="Check the current roster, update existing Facebook booking captions, and post release announcements")
     parser.add_argument("--limit", type=int, default=int(os.getenv("MAX_PER_RUN", "1")), help="Maximum records attempted across the entire run (default: MAX_PER_RUN or 1)")
     parser.add_argument("--deliveries", action="store_true", help="List pending/uncertain deliveries for reconciliation")
     parser.add_argument("--resolve-record", help="Hash of a pending/uncertain delivery to reconcile")
@@ -271,10 +325,21 @@ def main() -> int:
                 for error in report["errors"]:
                     failed = True
                     logging.getLogger("main").error("[%s] %s", city["city"], error)
+                if not args.dry_run and release_posts_enabled():
+                    releases = release_posts.publish_pending(
+                        conn, client, city, publisher.destination(city["workspace_key"]))
+                    logging.getLogger("main").info("[%s] Release posts: %s published",
+                                                   city["city"], releases["published"])
+                    for error in releases["errors"]:
+                        failed = True
+                        logging.getLogger("main").error("[%s] %s", city["city"], error)
         finally:
             conn.close()
         return 1 if failed else 0
-    if not args.dry_run and any(catchup_control.blocks_normal(
+    batch_size = booking_batch_size()
+    batch_mode = (bool(batch_size) and args.source_type == "booking"
+                  and os.getenv("PUBLISH_BACKEND", "queue").lower() == "meta")
+    if not args.dry_run and not batch_mode and any(catchup_control.blocks_normal(
             conn, publisher.destination(city["workspace_key"])) for city in cities):
         logging.getLogger("main").error("Grouped catch-up is active or paused. Finish or reconcile Booking Catch-Up before normal individual posting resumes.")
         conn.close()
@@ -289,14 +354,17 @@ def main() -> int:
         ]
     for city in cities:
         try:
-            process_city(city, conn, args, results, errors)
+            if batch_mode:
+                run_booking_batch(city, conn, args, results, errors, batch_size)
+            else:
+                process_city(city, conn, args, results, errors)
         except Exception as exc:  # last-resort guard so one city never kills the run
             logging.getLogger("main").error("[%s] Unhandled error: %s", city["city"], exc)
             errors.setdefault(city["city"], []).append(str(exc))
     conn.close()
 
     errors = {k: v for k, v in errors.items() if v}
-    photos = [(i["image"], i["caption"]) for items in results.values() for i in items][:10]
+    photos = [(i["image"], i["caption"]) for items in results.values() for i in items if i.get("image")][:10]
     notify.send_telegram_summary(results, errors, dry_run=args.dry_run, photos=photos)
     return 1 if errors else 0
 

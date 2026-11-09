@@ -5,7 +5,9 @@ from unittest.mock import MagicMock, patch
 import requests
 
 from adapters.allen_sheriff import AllenSheriffAdapter
-from adapters.indiana_most_wanted import IndianaMostWantedAdapter
+from adapters.indiana_most_wanted import (
+    IndianaMostWantedAdapter, parse_wanted_detail, parse_wanted_links,
+)
 
 
 class AdapterFailureTests(unittest.TestCase):
@@ -187,6 +189,69 @@ class AdapterFailureTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "roster is incomplete"):
             AllenSheriffAdapter()._load_list_html("https://source.example/roster")
         browser.close.assert_called_once()
+
+
+class IndianaMostWantedTests(unittest.TestCase):
+    LISTING = """
+    <html><body>
+    <p><b>2 New Warrants Found</b></p>
+    <a href="/Indiana/Allen/View/666111">Arellano, Eric</a>
+    <a href="/Indiana/Allen/View/666112">Bates, Jeremiah</a>
+    <a href="/Indiana/Allen">Allen County</a>
+    </body></html>
+    """
+    DETAIL = """
+    <html><head><title>Eric Arellano | Allen County Indiana Warrant | TheMostWanted.net</title></head>
+    <body>
+    <h1>Eric Arellano</h1>
+    <img src="/images/interface/mwlogo.png">
+    <img src="/images/counties/18/3/photos/666111-1.jpg">
+    <ul>
+      <li><b>DOB:</b> 02/15/2007</li>
+      <li><b>Gender:</b> Male</li>
+    </ul>
+    <h3>Wanted For:</h3>
+    <p><b>Warrant # 26-005343</b> Failure To Appear : 2 Counts</p>
+    <p>THE MOST WANTED NETWORK</p>
+    </body></html>
+    """
+
+    def test_listing_links_flip_names_and_keep_view_ids(self):
+        links = parse_wanted_links(self.LISTING, "https://www.themostwanted.net/Indiana/Allen/Browse/New")
+        self.assertEqual([item["view_id"] for item in links], ["666111", "666112"])
+        self.assertEqual(links[0]["name_hint"], "Eric Arellano")
+        self.assertEqual(links[0]["url"], "https://www.themostwanted.net/Indiana/Allen/View/666111")
+
+    def test_detail_parse_extracts_photo_age_and_warrant_charge(self):
+        detail = parse_wanted_detail(self.DETAIL, "https://www.themostwanted.net/Indiana/Allen/View/666111",
+                                     "666111", today=date(2026, 11, 8))
+        self.assertEqual(detail["name"], "Eric Arellano")
+        self.assertEqual(detail["age"], 19)
+        self.assertEqual(detail["charge"], "Failure To Appear: 2 Counts (Warrant #26-005343)")
+        self.assertEqual(detail["image_url"],
+                         "https://www.themostwanted.net/images/counties/18/3/photos/666111-1.jpg")
+
+    def test_fetch_walks_detail_pages_and_honors_seen_and_limit(self):
+        adapter = IndianaMostWantedAdapter()
+        adapter.max_per_run = 1
+        adapter.seen_check = lambda name, key, url: key == "666112"
+        response = MagicMock()
+        response.text = self.DETAIL
+        with patch("adapters.indiana_most_wanted.load_page_html", return_value=self.LISTING), \
+                patch("adapters.indiana_most_wanted.requests.get", return_value=response) as get:
+            records = adapter.fetch("https://www.themostwanted.net/Indiana/Allen/Browse/New")
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].kind, "warrant")
+        self.assertEqual(records[0].name, "Eric Arellano")
+        self.assertEqual(records[0].booking_date, "666111")
+        self.assertEqual(records[0].source_url, "https://www.themostwanted.net/Indiana/Allen/View/666111")
+        get.assert_called_once()
+
+    def test_fetch_reports_layout_change_instead_of_empty_result(self):
+        with patch("adapters.indiana_most_wanted.load_page_html",
+                   return_value="<html><body>New design</body></html>"):
+            with self.assertRaisesRegex(RuntimeError, "No wanted-listing links found"):
+                IndianaMostWantedAdapter().fetch("https://source.example/wanted")
 
 
 if __name__ == "__main__":

@@ -41,6 +41,13 @@ def initialize(conn: sqlite3.Connection) -> None:
         );
     """)
     conn.commit()
+    # Older databases predate the photo/charge columns the release-post flow
+    # needs; add them without disturbing retained history.
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(custody_posts)")}
+    for column in ("image_url", "charge"):
+        if column not in existing:
+            conn.execute(f"ALTER TABLE custody_posts ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
+    conn.commit()
 
 
 def _utc(now: datetime) -> datetime:
@@ -51,7 +58,7 @@ def _utc(now: datetime) -> datetime:
 
 def track(conn: sqlite3.Connection, record_hash: str, destination: str,
           source_key: str, remote_ref: str, caption: str, source_url: str,
-          name: str = "") -> None:
+          name: str = "", image_url: str = "", charge: str = "") -> None:
     """Track a caller-confirmed Meta delivery, retaining its first caption.
 
     The caller must only register confirmed published deliveries. A different
@@ -72,22 +79,28 @@ def track(conn: sqlite3.Connection, record_hash: str, destination: str,
     with conn:
         conn.execute("""
             INSERT INTO custody_posts
-                (record_hash, destination, source_key, remote_ref, original_caption, source_url, name)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                (record_hash, destination, source_key, remote_ref, original_caption,
+                 source_url, name, image_url, charge)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(record_hash, destination) DO UPDATE SET
                 source_url = excluded.source_url,
-                name = excluded.name
-        """, (record_hash, destination, source_key, reference, caption, source_url, name))
+                name = excluded.name,
+                image_url = CASE WHEN excluded.image_url != '' THEN excluded.image_url
+                                 ELSE custody_posts.image_url END,
+                charge = CASE WHEN excluded.charge != '' THEN excluded.charge
+                              ELSE custody_posts.charge END
+        """, (record_hash, destination, source_key, reference, caption, source_url,
+              name, image_url, charge))
 
 
 def pending_updates(conn: sqlite3.Connection, source_key: str) -> list[dict]:
     columns = ("record_hash", "destination", "source_key", "remote_ref", "original_caption",
-               "source_url", "name", "target_status", "missing_since", "last_seen_at",
-               "last_observed_at", "status_changed_at")
+               "source_url", "name", "image_url", "charge", "target_status", "missing_since",
+               "last_seen_at", "last_observed_at", "status_changed_at")
     rows = conn.execute("""
         SELECT record_hash, destination, source_key, remote_ref, original_caption,
-               source_url, name, desired_status, missing_since, last_seen_at,
-               last_observed_at, status_changed_at
+               source_url, name, image_url, charge, desired_status, missing_since,
+               last_seen_at, last_observed_at, status_changed_at
         FROM custody_posts
         WHERE source_key = ? AND desired_status != applied_status
         ORDER BY record_hash, destination
