@@ -40,3 +40,14 @@ services:
         sync: false
       - key: META_GRAPH_VERSION
         value: v26.0
+      # One service-owned Meta app; customers never handle these values.
+      - key: META_APP_ID
+        sync: false
+      - key: META_APP_SECRET
+        sync: false
+      - key: META_OAUTH_REDIRECT_URI
+        sync: false
+      - key: META_FACEBOOK_LOGIN_CONFIG_ID
+        sync: false
+      - key: META_PAGES_ENCRYPTION_SECRET
+        generateValue: true
