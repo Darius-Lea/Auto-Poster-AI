@@ -44,7 +44,7 @@ class WebMVPTests(unittest.TestCase):
             due = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
             r = client.post("/schedule", data={
                 "_csrf": csrf, "content": "A creator's draft post",
-                "platform": "draft", "utc_due": due
+                "destinations": "draft", "when": "later", "utc_due": due
             })
             self.assertEqual(r.status_code, 302)
             self.assertEqual(self.app.run_due(), 1)
@@ -66,10 +66,90 @@ class WebMVPTests(unittest.TestCase):
             csrf = self.login(client)
             with patch.dict(os.environ, {"META_PAGE_ID": "", "META_PAGE_ACCESS_TOKEN": ""}):
                 r = client.post("/schedule", data={
-                    "_csrf": csrf, "content": "Hello", "platform": "facebook",
-                    "utc_due": datetime.now(timezone.utc).isoformat()
+                    "_csrf": csrf, "content": "Hello", "destinations": "facebook",
+                    "when": "now", "frequency": "once", "time_zone": "UTC"
                 })
+            self.assertEqual(r.status_code, 302)
+            with self.app.db() as c:
+                row = c.execute("SELECT status FROM app_posts ORDER BY id DESC LIMIT 1").fetchone()
+            self.assertEqual(row["status"], "needs_connection")
+
+    def test_post_to_multiple_destinations(self):
+        with self.app.app.test_client() as client:
+            csrf = self.login(client)
+            with patch.dict(os.environ, {"META_PAGE_ID": "", "META_PAGE_ACCESS_TOKEN": ""}):
+                r = client.post("/schedule", data={
+                    "_csrf": csrf, "content": "One post, several apps",
+                    "destinations": ["draft", "instagram", "facebook"],
+                    "when": "now", "frequency": "once", "time_zone": "UTC",
+                })
+            self.assertEqual(r.status_code, 302)
+        with self.app.db() as c:
+            rows = c.execute(
+                "SELECT platform,status FROM app_posts WHERE content=?",
+                ("One post, several apps",),
+            ).fetchall()
+        self.assertEqual({r["platform"]:r["status"] for r in rows}, {
+            "draft": "scheduled", "instagram": "needs_connection",
+            "facebook": "needs_connection",
+        })
+
+    def test_custom_websites_never_pretend_to_publish(self):
+        with self.app.app.test_client() as client:
+            csrf = self.login(client)
+            r = client.post("/schedule", data={
+                "_csrf": csrf, "content": "Some relevant update",
+                "websites": ["https://example.org/publisher", "https://example.net"],
+                "when": "now", "frequency": "daily", "time_zone": "UTC",
+            })
+            self.assertEqual(r.status_code, 302)
+        with self.app.db() as c:
+            rows = c.execute(
+                "SELECT status,website_url,series_id FROM app_posts "
+                "WHERE content=? ORDER BY id", ("Some relevant update",),
+            ).fetchall()
+        self.assertEqual([r["status"] for r in rows],
+                         ["needs_connection", "needs_connection"])
+        self.assertTrue(all(r["series_id"] is None for r in rows))
+        self.assertEqual(rows[0]["website_url"], "https://example.org/publisher")
+
+    def test_invalid_website_rejected(self):
+        with self.app.app.test_client() as client:
+            csrf = self.login(client)
+            r = client.post("/schedule", data={
+                "_csrf": csrf, "content": "Hello", "websites": "http://example.net",
+                "when": "now", "frequency": "once", "time_zone": "UTC",
+            })
             self.assertEqual(r.status_code, 400)
+
+    def test_daily_repeat_and_stop(self):
+        with self.app.app.test_client() as client:
+            csrf = self.login(client)
+            now = datetime.now(timezone.utc)
+            r = client.post("/schedule", data={
+                "_csrf": csrf, "content": "My recurring draft",
+                "destinations": "draft", "frequency": "daily",
+                "when": "now", "time_zone": "America/Indiana/Indianapolis",
+            })
+            self.assertEqual(r.status_code, 302)
+            self.assertEqual(self.app.run_due(), 1)
+            with self.app.db() as c:
+                rows = c.execute(
+                    "SELECT id,status,series_id,due_at FROM app_posts "
+                    "WHERE content='My recurring draft' ORDER BY id"
+                ).fetchall()
+            self.assertEqual([r["status"] for r in rows], ["draft_ready", "scheduled"])
+            self.assertIsNotNone(rows[1]["series_id"])
+            self.assertGreater(datetime.fromisoformat(rows[1]["due_at"]), now)
+            r = client.post("/cancel/" + str(rows[1]["id"]), data={"_csrf": csrf})
+            self.assertEqual(r.status_code, 302)
+            with self.app.db() as c:
+                active = c.execute("SELECT active FROM app_series WHERE id=?",
+                                   (rows[1]["series_id"],)).fetchone()["active"]
+                status = c.execute("SELECT status FROM app_posts WHERE id=?",
+                                   (rows[1]["id"],)).fetchone()["status"]
+            self.assertEqual(active, 0)
+            self.assertEqual(status, "cancelled")
 
     def test_uncertain_fb_is_held(self):
         with self.app.db() as c:
