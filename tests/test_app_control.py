@@ -59,6 +59,24 @@ class ControlTests(unittest.TestCase):
         app_control.record_subscription_event(stripe_event(created=199))
         self.assertFalse(app_control.allowed(1700000000))
 
+    def test_modern_stripe_items_contain_billing_period(self):
+        event = stripe_event()
+        event["data"]["object"].pop("current_period_end")
+        event["data"]["object"]["items"] = {"data": [
+            {"current_period_end": 1800000000}
+        ]}
+        app_control.record_subscription_event(event)
+        self.assertTrue(app_control.allowed(1700000000))
+        self.assertFalse(app_control.allowed(1800000001))
+
+    def test_resubscription_after_cancellation(self):
+        app_control.record_subscription_event(stripe_event(created=200))
+        app_control.record_subscription_event(stripe_event(status="canceled", created=201))
+        renewed = stripe_event(created=300)
+        renewed["data"]["object"]["id"] = "sub_test_renewed"
+        app_control.record_subscription_event(renewed)
+        self.assertTrue(app_control.allowed(1700000000))
+
     def test_expiration_pauses_even_with_active_status(self):
         app_control.record_subscription_event(stripe_event(end=1700000000))
         self.assertFalse(app_control.allowed(1700000001))
