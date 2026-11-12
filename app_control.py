@@ -133,7 +133,11 @@ def record_subscription_event(event: dict) -> bool:
     if not subscription_id or not str(subscription_id).startswith("sub_"):
         return False
     created = int(event.get("created", 0))
-    period_end = int(obj.get("current_period_end", 0) or 0)
+    # Stripe 2025-03-31.basil and newer moved billing periods to items.
+    # Fail closed rather than guessing if the paid period is unavailable.
+    items = obj.get("items", {}).get("data", []) or []
+    ends = [int(item.get("current_period_end") or 0) for item in items]
+    period_end = min(ends) if ends else int(obj.get("current_period_end", 0) or 0)
     status = str(obj.get("status", "unknown"))
     with connect() as c:
         # event_created prevents an older webhook delivery from reactivating
@@ -149,7 +153,9 @@ def record_subscription_event(event: dict) -> bool:
             plan=excluded.plan,current_period_end=excluded.current_period_end,
             event_created=excluded.event_created,updated_at=excluded.updated_at
           WHERE excluded.event_created >= subscriptions.event_created
-            AND excluded.subscription_id = subscriptions.subscription_id
+            AND (excluded.subscription_id = subscriptions.subscription_id
+                 OR subscriptions.status != 'active'
+                 OR subscriptions.current_period_end <= excluded.updated_at)
         """, (WORKSPACE, obj.get("customer"), subscription_id, status,
               "basic", period_end, created, int(time.time())))
     return True
