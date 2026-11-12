@@ -14,6 +14,8 @@ services:
     envVars:
       - key: AUTOPOST_REQUIRE_PAYMENT
         value: "true"
+      - key: AUTOPOST_PUBLIC_LANDING
+        value: "true"
       - key: AUTOPOST_PUBLIC_URL
         sync: false
       - key: AUTOPOST_WORKER_TOKEN
