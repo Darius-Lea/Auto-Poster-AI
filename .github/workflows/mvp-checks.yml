@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "app_mvp.py"
+      - "templates/dashboard.html"
+      - "tests/test_preview_mode.py"
       - "app_mvp_wsgi.py"
       - "requirements-app.txt"
       - "tests/test_web_mvp.py"
