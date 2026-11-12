@@ -57,8 +57,8 @@ def validate(raw):
         raise ValueError("Your setup has an invalid identifier")
     platforms = raw.get("platforms")
     if (not isinstance(platforms, list) or not platforms or len(platforms) > 8
-            or len(set(platforms)) != len(platforms)
-            or any(not isinstance(p, str) or p not in PLATFORMS for p in platforms)):
+            or any(not isinstance(p, str) or p not in PLATFORMS for p in platforms)
+            or len(set(platforms)) != len(platforms)):
         raise ValueError("Choose valid social platforms")
     message = raw.get("message")
     topic = raw.get("topic")
