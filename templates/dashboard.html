@@ -130,11 +130,14 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
   {% if posts %}<div class="posts">
   {% for p in posts %}
    <article class="post">
-    <div class="split"><b>{{page_names.get(p.page_id, 'Facebook Page') if p.platform=='facebook_page' else 'Draft' if p.platform=='draft' else 'Facebook Page' if p.platform=='facebook' else p.platform|title}}</b><span class="badge {{'good' if p.status in ('published','draft_ready') else 'warn' if p.status in ('needs_review','needs_connection') else ''}}">{{p.status.replace('_',' ')|title}}</span></div>
+    <div class="split"><b>{{page_names.get(p.page_id, 'Facebook Page') if p.platform=='facebook_page' else 'Draft' if p.platform=='draft' else 'Facebook Page' if p.platform=='facebook' else p.platform|title}}</b><span class="badge {{'good' if p.status in ('published','draft_ready') else 'warn' if p.status in ('needs_review','needs_connection','setup_only') else ''}}">{{'Saved setup · not publishing' if p.status=='setup_only' else p.status.replace('_',' ')|title}}</span></div>
     <p>{{p.content}}</p><small>Planned: <time datetime="{{p.due_at}}">{{p.due_at}} UTC</time> · {{p.frequency}}</small>
     {% if p.remote_id %}<p class="small">Confirmed delivery: {{p.remote_id}}</p>{% endif %}
     {% if p.error %}<p class="small">Needs attention: {{p.error}}</p>{% endif %}
-    {% if p.status=='scheduled' %}<form method="post" action="/cancel/{{p.id}}"><input type="hidden" name="_csrf" value="{{csrf}}"><button type="submit">Cancel scheduled post</button></form>{% endif %}
+    {% if p.status in ('scheduled','setup_only') %}<form method="post" action="/cancel/{{p.id}}"><input type="hidden" name="_csrf" value="{{csrf}}"><button type="submit">{{'Remove planned post' if p.status=='setup_only' else 'Cancel scheduled post'}}</button></form>{% endif %}
+{% if p.status=='setup_only' and not preview_mode and paid and p.platform in ('facebook','facebook_page') %}
+<form method="post" action="/activate/{{p.id}}"><input type="hidden" name="_csrf" value="{{csrf}}"><button type="submit" onclick="return confirm('Activate this saved post for its originally selected time?')">Activate this post</button></form>
+{% endif %}
    </article>
   {% endfor %}
   </div>{% else %}<div class="empty"><p style="margin:0">No posts yet. Create a test draft above to see your first result.</p></div>{% endif %}
@@ -142,20 +145,20 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
 </main>
 </div>
 <nav class="mobile-nav" aria-label="Mobile navigation">
- <a href="#overview"><span>⌂</span>Home</a>
- <a href="#create"><span>✎</span>Create</a>
- <a href="#posts"><span>▦</span>Posts</a>
- <a href="/control"><span>⚙</span>Settings</a>
+ <a href="#overview"><svg class="icon" aria-hidden="true"><use href="#ico-grid"/></svg>Home</a>
+ <a href="#create"><svg class="icon" aria-hidden="true"><use href="#ico-pencil"/></svg>Create</a>
+ <a href="#posts"><svg class="icon" aria-hidden="true"><use href="#ico-calendar"/></svg>Posts</a>
+ <a href="/automations"><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg>Automate</a><a href="/control"><svg class="icon" aria-hidden="true"><use href="#ico-settings"/></svg>Settings</a>
 </nav>
 <div class="modal" id="confirm-modal" hidden role="dialog" aria-modal="true" aria-labelledby="confirm-title">
  <div class="modal-panel">
-  <span class="eyebrow">FINAL REVIEW</span><h2 id="confirm-title">Ready to schedule?</h2>
-  <p>Confirm where this message will go and when it will be processed.</p>
+  <span class="eyebrow">FINAL REVIEW</span><h2 id="confirm-title">Review before saving</h2>
+  <p>Check the destinations and time before you save. Unpaid setup plans cannot publish.</p>
   <div class="preview-box"><div class="label">Your message</div><div class="preview-text" id="confirm-message"></div></div>
   <p><b>Destination:</b> <span id="confirm-targets"></span></p>
   <p><b>Timing:</b> <span id="confirm-time"></span></p>
-  <p><b>Repeat:</b> <span id="confirm-repeat"></span></p>
-  <div class="actions"><button type="button" class="button-secondary" id="edit-post">Go back</button><button type="button" class="button" id="confirm-post">Confirm schedule</button></div>
+  <p><b>Repeat:</b> <span id="confirm-repeat"></span></p><p class="footnote" id="confirm-warning">Saving an automation setup never starts live publishing.</p>
+  <div class="actions"><button type="button" class="button-secondary" id="edit-post">Go back</button><button type="button" class="button" id="confirm-post">Confirm and save</button></div>
  </div>
 </div>
 <script>
@@ -186,6 +189,9 @@ form.addEventListener('submit',e=>{
  document.getElementById('confirm-targets').textContent=destinations.join(', ');
  document.getElementById('confirm-time').textContent=timing;
  document.getElementById('confirm-repeat').textContent=document.getElementById('frequency').selectedOptions[0].text;
+ document.getElementById('confirm-warning').textContent = ({{ 'true' if preview_mode or not paid else 'false' }}) ?
+ 'Setup-only: You can configure now without paying. This will not publish until you subscribe, connect, and explicitly activate.' :
+ 'Connected destinations can publish at the selected time. Confirm the content carefully.';
  modal.hidden=false;edit.focus();
 });
 edit.addEventListener('click',()=>{modal.hidden=true;review.focus();});
