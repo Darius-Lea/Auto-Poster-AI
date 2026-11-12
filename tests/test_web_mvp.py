@@ -28,6 +28,12 @@ class WebMVPTests(unittest.TestCase):
         cls.env.stop()
         cls.tmp.cleanup()
 
+    def setUp(self):
+        # Each test gets a clean queue to avoid jobs from earlier tests.
+        with self.app.db() as c:
+            c.execute("DELETE FROM app_posts")
+            c.execute("DELETE FROM app_series")
+
     def login(self, client):
         r = client.post("/login", data={"password": "a-long-test-password-123"})
         self.assertEqual(r.status_code, 302)
