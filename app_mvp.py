@@ -13,7 +13,9 @@ import secrets
 import sqlite3
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -44,6 +46,21 @@ def init_db():
           remote_id TEXT, error TEXT,
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS app_series (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            content TEXT NOT NULL, platform TEXT NOT NULL,
+            frequency TEXT NOT NULL CHECK(frequency IN ('daily','weekly')),
+            time_zone TEXT NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1
+        )""")
+        columns = {row[1] for row in c.execute("PRAGMA table_info(app_posts)")}
+        if "series_id" not in columns:
+            c.execute("ALTER TABLE app_posts ADD COLUMN series_id INTEGER")
+        if "website_url" not in columns:
+            c.execute("ALTER TABLE app_posts ADD COLUMN website_url TEXT")
+        if "frequency" not in columns:
+            c.execute("ALTER TABLE app_posts ADD COLUMN frequency TEXT NOT NULL DEFAULT 'once'")
+        c.execute("CREATE UNIQUE INDEX IF NOT EXISTS unique_series_due ON app_posts(series_id,due_at)")
 
 
 def require_login():
@@ -85,9 +102,24 @@ def claim_due(now=None):
             return dict(row) if row else None
 
 
+def next_recurrence_due(last_due, frequency, zone_name, now):
+    """Preserve local wall-clock hour and skip missed occurrences after outages."""
+    tz = ZoneInfo(zone_name)
+    current = now.astimezone(tz)
+    previous = datetime.fromisoformat(last_due).astimezone(tz)
+    day_step = timedelta(days=1 if frequency == "daily" else 7)
+    next_day = previous.date() + day_step
+    while True:
+        candidate = datetime.combine(next_day, previous.timetz().replace(tzinfo=None), tzinfo=tz)
+        if candidate > current:
+            return candidate.astimezone(timezone.utc).isoformat(timespec="seconds")
+        next_day += day_step
+
+
 def run_due(now=None):
-    """A single worker pass. Delivery errors are held instead of blindly retried."""
+    """Run due jobs. Only confirmed successes continue recurring series."""
     handled = 0
+    now = now or datetime.now(timezone.utc)
     for _ in range(MAX_POSTS_PER_RUN):
         job = claim_due(now)
         if job is None:
@@ -98,19 +130,34 @@ def run_due(now=None):
             if job["platform"] == "facebook":
                 remote = publish_to_facebook(job["content"])
                 state = "published"
-            else:
-                # A successful draft is NOT a successful social media delivery.
+            elif job["platform"] == "draft":
                 state = "draft_ready"
+            else:
+                state = "needs_connection"
         except Exception as exc:
             error = f"{type(exc).__name__}: {str(exc)[:300]}"
             state = "needs_review"
         with db() as c:
-            # Recover interrupted uploads as needs_review rather than repeating them.
             c.execute(
                 "UPDATE app_posts SET status=?,remote_id=?,error=? "
                 "WHERE id=? AND status='sending'",
                 (state, remote, error, job["id"]),
             )
+            if state in ("published", "draft_ready") and job.get("series_id"):
+                series = c.execute(
+                    "SELECT * FROM app_series WHERE id=? AND active=1", (job["series_id"],)
+                ).fetchone()
+                if series:
+                    next_due = next_recurrence_due(
+                        job["due_at"], series["frequency"], series["time_zone"], now
+                    )
+                    c.execute(
+                        "INSERT OR IGNORE INTO app_posts"
+                        "(content,platform,due_at,status,series_id,frequency)"
+                        " VALUES(?,?,?,'scheduled',?,?)",
+                        (series["content"], series["platform"], next_due,
+                         series["id"], series["frequency"]),
+                    )
     return handled
 
 
@@ -134,85 +181,154 @@ def worker():
 PAGE = """
 <!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Auto Poster AI · Starter</title>
+<title>Auto Poster AI · Post</title>
 <style>
-:root{color-scheme:dark;font-family:system-ui,-apple-system,sans-serif}
-body{margin:0;background:#101218;color:#f1f3f7}
-header{max-width:950px;margin:auto;padding:26px 20px;display:flex;justify-content:space-between;align-items:center}
-main{max-width:950px;margin:auto;padding:0 20px 60px}
-h1{font-size:2rem;letter-spacing:-.04em;margin:12px 0}h2{font-size:1.13rem}
-p,small,.muted{color:#a8afbf;line-height:1.55}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
-.panel{padding:22px;background:#1c202a;border:1px solid #303542;border-radius:18px;margin:14px 0}
-input,textarea,select,button{font:inherit;box-sizing:border-box}
-input,textarea,select{background:#11151e;color:white;width:100%;padding:13px;border:1px solid #444c5b;border-radius:10px;margin:7px 0 16px}
-textarea{min-height:140px;resize:vertical}
-button{padding:13px 20px;background:#beee83;color:#14210c;border:0;border-radius:10px;font-weight:700;cursor:pointer}
-a{color:#beee83}.pill{display:inline-block;background:#303848;padding:5px 10px;border-radius:20px;font-size:.8rem}
-.post{padding:14px 0;border-top:1px solid #363c4a;overflow-wrap:anywhere}
-.error{color:#ffb3b3}label{font-weight:600;font-size:.9rem}
-nav{display:flex;gap:16px}
-@media(max-width:600px){header{align-items:flex-start;gap:12px;flex-direction:column}nav{flex-wrap:wrap}}
+:root{color-scheme:dark;font:16px system-ui,-apple-system,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:#101319;color:#eff3f9}
+header,main{max-width:900px;margin:auto;padding:16px}
+header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #303744}
+header b{font-size:19px}a{color:#c8fa89}
+h1{font-size:30px;letter-spacing:-1px;margin:4px 0 8px}
+h2{font-size:17px;margin:0 0 12px}
+p,small{color:#b2bdca;line-height:1.5}
+.panel{background:#1c232e;border:1px solid #343e4d;border-radius:17px;padding:20px;margin:18px 0}
+.grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:16px}
+label{display:block;font-weight:650;font-size:13px;margin:15px 0 7px}
+textarea,input,select,button{font:inherit}
+textarea,input,select{width:100%;padding:13px;border-radius:10px;border:1px solid #465267;color:#f2f5f9;background:#111722}
+textarea{resize:vertical;min-height:135px}
+button{padding:12px 15px;background:#c7f78b;border:0;border-radius:10px;color:#18251a;font-weight:750;cursor:pointer}
+button.ghost{background:#303b49;color:#e5edf6}
+.pill{display:inline-flex;align-items:center;padding:6px 10px;border-radius:100px;background:#324052;color:#e5eef6;font-size:12px;font-weight:600}
+.success{background:#284737;color:#c7f78b}.pending{background:#514231;color:#ffe0a0}
+.note{padding:12px;border:1px solid #4a5569;background:#26303d;border-radius:10px;font-size:12px;color:#c7d1df;line-height:1.6}
+.dest{display:flex;gap:12px;align-items:center;cursor:pointer;padding:12px 9px;border-bottom:1px solid #344050;margin:0}
+.dest input{width:18px;height:18px;flex-shrink:0;accent-color:#c7f78b}
+.dest span{flex:1}.dest small{display:block;font-size:11px}.dest b{font-size:13px}
+.dest .pill{font-size:10px;padding:4px 7px}
+.dest:last-child{border:0}
+details{margin:10px 0;border:1px solid #455369;border-radius:12px}
+summary{cursor:pointer;padding:13px 15px;font-weight:700;color:#d1e7bd}
+details>div{padding:0 12px 10px}
+.row{display:flex;gap:9px;flex-wrap:wrap}
+.post{border-top:1px solid #384253;padding:12px 0}
+.post:first-child{border:0}
+.post p{white-space:pre-wrap;overflow-wrap:anywhere;color:#f2f5f9}
+.status{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.website{display:flex;align-items:center;gap:8px;margin:9px 0}
+.website input{flex:1;min-width:0}.website button{flex-shrink:0}
+.warning{color:#ffbdbd}
+@media(max-width:700px){.grid{grid-template-columns:1fr}header,main{padding:15px}.panel{padding:17px}h1{font-size:27px}}
 </style></head><body>
-<header><strong>✦ Auto Poster AI</strong>
-<nav><a href="/">Home</a><a href="/logout">Sign out</a></nav></header>
+<header><b>✳ Auto Poster AI</b><a href="/logout">Sign out</a></header>
 <main>
-<span class="pill">Starter · Single owner</span>
-<h1>Your content, on autopilot.</h1>
-<p>Write once. Schedule it. Keep track. The Facebook Page connector uses the existing
-account authorization stored on your server. Other destinations currently save drafts only.</p>
-<div class="grid">
-<div class="panel"><h2>Scheduled</h2><h1>{{ counts.get("scheduled",0) }}</h1></div>
-<div class="panel"><h2>Published</h2><h1>{{ counts.get("published",0) }}</h1></div>
-<div class="panel"><h2>Needs attention</h2><h1>{{ counts.get("needs_review",0) }}</h1></div>
-</div>
+<p><span class="pill">Single-owner starter · Live connections shown below</span></p>
+<h1>What do you want to post?</h1>
+<p>Write it once. Tap <strong>+ Add apps or websites</strong>. Choose how often.</p>
 <div class="grid">
 <section class="panel">
-<h2>Create a post</h2>
-<form method="post" action="/schedule">
-<label for="content">What's your post about?</label>
-<textarea id="content" name="content" maxlength="10000" required placeholder="Write a post for any topic or audience."></textarea>
-<label for="platform">Destination</label>
-<select name="platform" id="platform">
-<option value="draft">Save as a draft (no social publishing)</option>
-<option value="facebook">Facebook Page (requires configured Page access)</option>
+<form method="post" action="/schedule" id="composer">
+<input type="hidden" name="_csrf" value="{{csrf}}">
+<label for="content">Your post</label>
+<textarea id="content" name="content" required maxlength="10000"
+placeholder="Write about your latest video, a sale, an adoption, a community update, or anything you want to share."></textarea>
+<details id="destinations" open>
+<summary>＋ Add apps or websites <span id="selected-count" class="pill">1 selected</span></summary>
+<div>
+<label class="dest"><input type="checkbox" name="destinations" value="draft" checked>
+<span><b>Save a draft</b><small>No external publishing</small></span><span class="pill success">Ready</span></label>
+<label class="dest"><input type="checkbox" name="destinations" value="facebook">
+<span><b>Facebook Page</b><small>Text posts on your authorized Page</small></span>
+<span class="pill {{ 'success' if fb_enabled else 'pending' }}">{{ 'Ready' if fb_enabled else 'Connect first' }}</span></label>
+{% for app in other_apps %}
+<label class="dest"><input type="checkbox" name="destinations" value="{{app}}">
+<span><b>{{app|title}}</b><small>Save publishing request</small></span><span class="pill pending">Needs integration</span></label>
+{% endfor %}
+<div id="websites"></div>
+<button type="button" class="ghost" id="add-website">＋ Add a website URL</button>
+</div>
+</details>
+<label for="frequency">How often?</label>
+<select name="frequency" id="frequency">
+<option value="once">Only once</option>
+<option value="daily">Every day — repeat this same post</option>
+<option value="weekly">Every week — repeat this same post</option>
 </select>
-<label for="due">Post at (your local time)</label>
-<input type="datetime-local" id="due" name="due" required>
+<label for="when">When should the first one go?</label>
+<select name="when" id="when"><option value="now">As soon as possible</option>
+<option value="later">Choose date & time</option></select>
+<div id="later-fields" hidden>
+<label for="due">Choose your local time</label><input type="datetime-local" id="due" name="due">
+</div>
 <input type="hidden" id="utc_due" name="utc_due">
-<button type="submit">Schedule post</button>
+<input type="hidden" id="time_zone" name="time_zone" value="UTC">
+<p class="note">Facebook posts only if your existing Page connection is configured. Other social apps and websites will be saved as <b>Needs connection</b>, never marked published. Repeating a post republishes the same text; source monitoring is a separate upcoming feature.</p>
+<button type="submit" style="width:100%;margin-top:15px">Post or schedule</button>
 </form>
 </section>
-<section class="panel">
-<h2>Autopilot health</h2>
-<p><strong>Background scheduler:</strong> Running while this server process is running.</p>
-<p><strong>Facebook:</strong> {{ "Server credentials configured" if fb_enabled else "Needs server-side Page authorization" }}</p>
-<p><strong>Canva and other networks:</strong> Not connected to this starter app yet.</p>
-<p><strong>Limits:</strong> Text posts only for this first MVP. Images, video, feeds, OAuth, billing, and analytics come next.</p>
-<p><strong>Safety:</strong> Failed or uncertain uploads are held for review, not automatically resent.</p>
-</section>
+<aside>
+<div class="panel"><h2>Your activity</h2>
+<p><b>{{counts.get('scheduled',0)}}</b> scheduled ·
+<b>{{counts.get('published',0)}}</b> published</p>
+<p><b>{{counts.get('needs_connection',0)}}</b> awaiting connection ·
+<b>{{counts.get('needs_review',0)}}</b> needing review</p>
+<div class="note">The scheduler runs while the hosted service stays on. This starter still needs deployment before you can use it from any device.</div></div>
+<div class="panel"><h2>What happens next?</h2>
+<p>1. Select your apps or website.</p>
+<p>2. Pick a frequency.</p>
+<p>3. Keep track here—no developer dashboard needed for everyday posting.</p>
+<small>Real additional platforms require approved connectors and account authorization.</small>
 </div>
-<section class="panel"><h2>Post history</h2>
+</aside>
+</div>
+<section class="panel"><h2>Your posts</h2>
 {% for p in posts %}
-<div class="post"><span class="pill">{{p.status}}</span>
-<strong>{{p.platform}}</strong> · <small>{{p.due_at}}</small>
-<p style="white-space:pre-wrap;color:#f0f2f7">{{p.content}}</p>
-{% if p.remote_id %}<small>Post ID: {{p.remote_id}}</small>{% endif %}
-{% if p.error %}<p class="error">{{p.error}}</p>{% endif %}
+<div class="post">
+<div class="status"><b>{{p.platform|title}}</b><span class="pill {{'success' if p.status=='published' else 'pending' if p.status=='needs_connection' else ''}}">{{p.status.replace('_',' ')|title}}</span><small>{{p.frequency}}</small></div>
+{% if p.website_url %}<small>{{p.website_url}}</small>{% endif %}
+<p>{{p.content}}</p>
+<small>{{p.due_at}}</small>
+{% if p.remote_id %}<small> · Confirmed ID {{p.remote_id}}</small>{% endif %}
+{% if p.error %}<p class="warning">{{p.error}}</p>{% endif %}
 {% if p.status == 'scheduled' %}
-<form method="post" action="/cancel/{{p.id}}"><button type="submit">Cancel scheduled post</button></form>
+<form method="post" action="/cancel/{{p.id}}">
+<input type="hidden" name="_csrf" value="{{csrf}}">
+<button type="submit" class="ghost">{{'Stop repeating' if p.series_id else 'Cancel post'}}</button></form>
 {% endif %}
 </div>
-{% else %}<p>No posts yet. Make your first one above.</p>{% endfor %}
+{% else %}<p>No posts yet. Create your first one above.</p>{% endfor %}
 </section>
 </main>
 <script>
-const form=document.querySelector('form[action="/schedule"]');
-form.addEventListener('submit', e=>{
-const input=document.getElementById('due');
-const d=new Date(input.value);
-if(!input.value || isNaN(d.valueOf())) { e.preventDefault(); alert('Choose a valid time'); return; }
+const form=document.getElementById('composer'),when=document.getElementById('when');
+const later=document.getElementById('later-fields'),date=document.getElementById('due');
+const websites=document.getElementById('websites');
+when.addEventListener('change',()=>{later.hidden=when.value!=='later';date.required=when.value==='later'});
+document.getElementById('add-website').addEventListener('click',()=>{
+if(websites.children.length>=5){alert('You can add up to five websites at once.');return}
+const row=document.createElement('div');row.className='website';
+const input=document.createElement('input');input.name='websites';input.type='url';
+input.placeholder='https://your-website.com';input.required=true;input.setAttribute('aria-label','Website URL');
+const remove=document.createElement('button');remove.type='button';remove.className='ghost';remove.textContent='Remove';
+remove.addEventListener('click',()=>{row.remove();updateCount()});
+row.append(input,remove);websites.append(row);updateCount();
+});
+function updateCount(){
+const n=form.querySelectorAll('input[name="destinations"]:checked').length+websites.children.length;
+document.getElementById('selected-count').textContent=n+' selected';
+}
+form.querySelectorAll('input[name="destinations"]').forEach(el=>el.addEventListener('change',updateCount));
+form.addEventListener('submit',e=>{
+if(!form.querySelector('input[name="destinations"]:checked') && !websites.children.length){
+e.preventDefault();alert('Tap + to choose an app or website.');return;
+}
+if(when.value==='later'){
+const d=new Date(date.value);
+if(!date.value||isNaN(d.getTime())){e.preventDefault();alert('Choose a valid date.');return}
 document.getElementById('utc_due').value=d.toISOString();
+}
+document.getElementById('time_zone').value=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';
 });
 </script></body></html>
 """
@@ -270,39 +386,94 @@ def home():
         counts = {r["status"]: r["n"] for r in c.execute(
             "SELECT status,COUNT(*) n FROM app_posts GROUP BY status"
         )}
-    page = PAGE.replace('<form method="post" action="/schedule">',
-        '<form method="post" action="/schedule"><input type="hidden" name="_csrf" value="{{csrf}}">')
-    page = page.replace('<form method="post" action="/cancel/{{p.id}}">',
-        '<form method="post" action="/cancel/{{p.id}}"><input type="hidden" name="_csrf" value="{{csrf}}">')
-    return render_template_string(page, posts=rows, counts=counts, csrf=session["csrf"],
-                                  fb_enabled=bool(os.getenv("META_PAGE_ID") and os.getenv("META_PAGE_ACCESS_TOKEN")))
+    return render_template_string(
+        PAGE, posts=rows, counts=counts, csrf=session["csrf"],
+        fb_enabled=bool(os.getenv("META_PAGE_ID") and os.getenv("META_PAGE_ACCESS_TOKEN")),
+        other_apps=("instagram", "tiktok", "youtube", "linkedin", "pinterest", "threads", "x"),
+    )
+
+
+SUPPORTED_DESTINATIONS = {"draft", "facebook", "instagram", "tiktok", "youtube",
+                          "linkedin", "pinterest", "threads", "x"}
+
+
+def selected_destinations(form):
+    """Keep unsupported destinations on hold instead of implying API access."""
+    platforms = list(dict.fromkeys(form.getlist("destinations")))
+    if any(platform not in SUPPORTED_DESTINATIONS for platform in platforms):
+        raise ValueError("Unknown destination")
+    websites = list(dict.fromkeys(url.strip() for url in form.getlist("websites") if url.strip()))
+    if len(websites) > 5:
+        raise ValueError("Choose at most five websites")
+    for url in websites:
+        parsed = urlparse(url)
+        if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
+                or len(url) > 2048):
+            raise ValueError("Website URLs must use HTTPS and cannot contain credentials")
+    result = [(p, None) for p in platforms]
+    result += [("website", url) for url in websites]
+    if not result or len(result) > 12:
+        raise ValueError("Add at least one app or website")
+    return result
 
 
 @app.route("/schedule", methods=["POST"])
 def schedule():
     content = request.form.get("content", "").strip()
-    platform = request.form.get("platform")
-    if not content or len(content) > 10000 or platform not in ("draft", "facebook"):
-        abort(400, "Invalid post or destination")
+    if not content or len(content) > 10000:
+        abort(400, "Write a post before scheduling")
     try:
-        due = valid_due(request.form.get("utc_due"))
+        targets = selected_destinations(request.form)
     except ValueError as exc:
         abort(400, str(exc))
-    if platform == "facebook" and not (
-        os.getenv("META_PAGE_ID") and os.getenv("META_PAGE_ACCESS_TOKEN")
-    ):
-        abort(400, "Configure the Facebook Page connection on the server first")
+    frequency = request.form.get("frequency", "once")
+    if frequency not in ("once", "daily", "weekly"):
+        abort(400, "Invalid posting frequency")
+    zone_name = request.form.get("time_zone", "UTC")
+    try:
+        ZoneInfo(zone_name)
+    except (KeyError, ValueError):
+        abort(400, "Invalid timezone")
+    when = request.form.get("when", "later")
+    if when not in ("now", "later"):
+        abort(400, "Choose now or a future date")
+    try:
+        due = (datetime.now(timezone.utc).isoformat(timespec="seconds")
+               if when == "now" else valid_due(request.form.get("utc_due")))
+    except ValueError as exc:
+        abort(400, str(exc))
+    facebook_ready = bool(os.getenv("META_PAGE_ID") and os.getenv("META_PAGE_ACCESS_TOKEN"))
     with db() as c:
-        c.execute("INSERT INTO app_posts(content,platform,due_at) VALUES(?,?,?)",
-                  (content, platform, due))
+        for platform, website_url in targets:
+            supported = platform == "draft" or (platform == "facebook" and facebook_ready)
+            status = "scheduled" if supported else "needs_connection"
+            series_id = None
+            if frequency != "once" and supported:
+                cursor = c.execute(
+                    "INSERT INTO app_series(content,platform,frequency,time_zone) VALUES(?,?,?,?)",
+                    (content, platform, frequency, zone_name),
+                )
+                series_id = cursor.lastrowid
+            c.execute(
+                "INSERT INTO app_posts"
+                "(content,platform,due_at,status,series_id,frequency,website_url)"
+                " VALUES(?,?,?,?,?,?,?)",
+                (content, platform, due, status, series_id, frequency, website_url),
+            )
     return redirect("/")
 
 
 @app.route("/cancel/<int:post_id>", methods=["POST"])
 def cancel(post_id):
     with db() as c:
-        c.execute("UPDATE app_posts SET status='cancelled' "
-                  "WHERE id=? AND status='scheduled'", (post_id,))
+        post = c.execute("SELECT series_id FROM app_posts WHERE id=?", (post_id,)).fetchone()
+        if post and post["series_id"]:
+            c.execute("UPDATE app_series SET active=0 WHERE id=?", (post["series_id"],))
+            c.execute("UPDATE app_posts SET status='cancelled' "
+                      "WHERE series_id=? AND status='scheduled'", (post["series_id"],))
+        else:
+            c.execute("UPDATE app_posts SET status='cancelled' "
+                      "WHERE id=? AND status='scheduled'", (post_id,))
     return redirect("/")
 
 
