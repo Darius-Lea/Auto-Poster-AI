@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 MODES = {"publish", "publish-and-check", "publish-wanted", "publish-case", "check-status"}
+READ_ONLY_MODES = {"preview", "preview-status", "check-facebook"}
 
 
 def write_line(path, key, value):
@@ -26,6 +27,13 @@ def main():
     token = os.getenv("AUTOPOST_CONTROL_TOKEN", "")
     required = os.getenv("AUTOPOST_REMOTE_REQUIRED", "false").lower() == "true"
     mode = os.getenv("AUTOPOST_REQUESTED_MODE", "publish")
+    if mode in READ_ONLY_MODES:
+        # Viewing and checking existing settings never publishes and stays available
+        # when a subscription expires.
+        write_line(os.getenv("GITHUB_OUTPUT"), "run", "true")
+        write_line(os.getenv("GITHUB_OUTPUT"), "mode", mode)
+        write_line(os.getenv("GITHUB_OUTPUT"), "limit", "1")
+        return
     if mode not in MODES:
         raise SystemExit("Unsupported requested mode")
     if not url:
