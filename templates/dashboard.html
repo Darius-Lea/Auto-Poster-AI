@@ -72,17 +72,18 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
   <div class="metrics">
    <div class="metric"><strong>{{counts.get('scheduled',0)}}</strong><small>Scheduled</small></div>
    <div class="metric"><strong>{{counts.get('draft_ready',0)}}</strong><small>Drafts ready</small></div>
-   <div class="metric"><strong>{{counts.get('published',0)}}</strong><small>Published</small></div>
+   <div class="metric"><strong>{{counts.get('setup_only',0)}}</strong><small>Saved setups</small></div>
   </div>
   <section class="card" aria-label="Getting started">
-   <div class="split"><h2>Let's get you started</h2><span class="badge good">3 quick steps</span></div>
-   <p>Here's the easiest way to explore this preview on your phone.</p>
-   <ol class="steps">
-    <li><span class="number">1</span><span><b>Explore your connected accounts</b><small><a href="/pages">Facebook Pages</a> shows connection status. Live authorization isn't enabled in the free preview.</small></span></li>
-    <li><span class="number">2</span><span><b>Create a test draft</b><small>Write something below and explicitly choose <b>Save a draft</b>. No post will go to Facebook.</small></span></li>
-    <li><span class="number">3</span><span><b>Check your posts</b><small>See the draft's status, scheduled time, and any warnings in <a href="#posts">Your posts</a>.</small></span></li>
-   </ol>
-  </section>
+ <div class="split"><h2>Plan first, pay when ready</h2><span class="badge good">No payment required</span></div>
+ <p>Set your preferred content, Pages and timing now. Saving a plan does not start publishing.</p>
+ <ol class="steps">
+  <li><span class="number">1</span><span><b>Choose your destination</b><small><a href="/pages">View Facebook Pages</a>, or plan for a Facebook Page you will connect later.</small></span></li>
+  <li><span class="number">2</span><span><b>Build an automation</b><small>Choose content, source, frequency and approval. <a href="/automations">Create a free setup</a>.</small></span></li>
+  <li><span class="number">3</span><span><b>Prepare a post</b><small>Save a draft or future posting plan below. You remain in control of activation.</small></span></li>
+ </ol>
+ <div style="margin-top:18px"><a class="button" href="/automations"><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg> Set up an automation for free</a></div>
+ </section>
  </section>
  <div class="content-grid">
   <section class="card" id="create">
@@ -98,7 +99,7 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
      {% if fb_enabled and not preview_mode %}
      <label class="destination" for="legacyfacebook"><input type="checkbox" id="legacyfacebook" name="destinations" value="facebook"><span class="desc"><b>Existing Facebook Page</b><small>Uses the owner's existing Page authorization</small></span><span class="badge good">Connected</span></label>
      {% else %}
-     <div class="destination offline"><span class="desc"><b>Facebook Pages</b><small>{% if preview_mode %}Disabled in this free preview{% else %}Connect your Page before publishing{% endif %}</small></span><a href="/pages" class="badge">View setup</a></div>
+     <label class="destination" for="facebook-plan"><input type="checkbox" id="facebook-plan" name="destinations" value="facebook"><span class="desc"><b>Facebook Page — plan now</b><small>Save this post and its timing before you connect or subscribe.</small></span><span class="badge">Setup only</span></label>
      {% endif %}
      {% for pg in fb_pages %}{% if pg.can_publish and not preview_mode %}
      <label class="destination" for="fb{{pg.page_id}}"><input type="checkbox" id="fb{{pg.page_id}}" name="facebook_pages" value="{{pg.page_id}}"><span class="desc"><b>{{pg.name}}</b><small>Facebook business Page</small></span><span class="badge good">Connected</span></label>
@@ -111,8 +112,8 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
     <input type="hidden" id="utc_due" name="utc_due"><input type="hidden" id="time_zone" name="time_zone" value="UTC">
     <details><summary>More options · Repeat this same message</summary><div class="details-inner"><label for="frequency">Repeat frequency</label><select name="frequency" id="frequency"><option value="once">Do not repeat</option><option value="daily">Every day — same wording</option><option value="weekly">Every week — same wording</option></select><p class="footnote">This doesn't generate fresh content. Repeating creates a new scheduled job only after the previous one completes.</p></div></details>
     <div class="preview-box" aria-live="polite"><div class="label">Message preview</div><div id="message-preview" class="preview-text">Your message will appear here as you type.</div></div>
-    <p class="footnote">Review the exact destination and timing before confirming. No social network is selected automatically.</p>
-    <button class="button button-full" type="submit" id="review-button">Review post →</button>
+    <p class="footnote">No destination is selected automatically. Saving an unpaid Facebook setup does not publish now or automatically after subscribing.</p>
+    <button class="button button-full" type="submit" id="review-button"><svg class="icon" aria-hidden="true"><use href="#ico-check"/></svg> Review post or setup</button>
    </form>
   </section>
   <aside>
@@ -120,7 +121,7 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
     <div class="help"><strong>{% if fb_pages or fb_enabled %}Facebook configured{% else %}Facebook not connected{% endif %}</strong><div class="small">{% if preview_mode %}External publishing is disabled for this free test site.{% elif fb_pages %}{{fb_pages|length}} Page connection(s) available.{% else %}Facebook login requires the service-owned Meta integration.{% endif %}</div></div>
     <a class="button-secondary button-full" href="/pages">Manage Facebook Pages</a>
    </section>
-   <section class="card"><h2>Autopilot</h2><div class="split"><span class="badge {{ 'good' if settings.enabled and not preview_mode else 'warn' }}">{{'On' if settings.enabled and not preview_mode else 'Not running here'}}</span><span class="small">Owner controls</span></div><p>{% if preview_mode %}Autonomous publishing is unavailable in this free preview. Your existing live publisher is separate.{% else %}Control the existing approved schedules and source settings.{% endif %}</p><a href="/control" class="button-secondary button-full">View settings</a></section>
+   <section class="card"><h2>Automations</h2><p><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg> {{plans|length}} saved {{'plan' if plans|length==1 else 'plans'}}. Create or edit yours for free.</p><a class="button-secondary button-full" href="/automations">Manage automation setups</a></section><section class="card"><h2>Autopilot</h2><div class="split"><span class="badge {{ 'good' if settings.enabled and not preview_mode else 'warn' }}">{{'On' if settings.enabled and not preview_mode else 'Not running here'}}</span><span class="small">Owner controls</span></div><p>{% if preview_mode %}You can configure and save automations here, but this preview will not publish anything externally. Your existing live publisher is separate.{% else %}Configure your workflow first, and turn on only supported publishing after payment and explicit approval.{% endif %}</p><a href="/control" class="button-secondary button-full">View settings</a></section>
    <section class="card"><h2>Coming later</h2><p>AI comment replies, Growth Intelligence, media uploads, real-time analytics, and monitored website feeds require verified integrations and additional development.</p><span class="badge">Not active</span></section>
   </aside>
  </div>
