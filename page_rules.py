@@ -80,3 +80,10 @@ def delete_route(workspace_id, rule_id):
     with meta_accounts._db() as c:
         c.execute("DELETE FROM facebook_content_routes WHERE workspace_id=? AND id=?",
                   (workspace_id, rule_id))
+
+
+def remove_page_routes(workspace_id, page_id):
+    """Disconnect permanently removes automation rules; reconnect stays opt-in."""
+    with meta_accounts._db() as c:
+        c.execute("DELETE FROM facebook_content_routes WHERE workspace_id=? AND page_id=?",
+                  (workspace_id, page_id))
