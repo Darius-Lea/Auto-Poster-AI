@@ -24,6 +24,7 @@ from flask import Flask, abort, flash, redirect, render_template, render_templat
 import app_control
 import meta_accounts
 import automation_setup
+import public_setup
 
 load_dotenv()
 app = Flask(__name__)
@@ -85,6 +86,7 @@ def init_db():
     app_control.init()
     meta_accounts.init()
     automation_setup.init()
+    public_setup.init()
 
 
 def require_login():
@@ -480,6 +482,12 @@ def public_website():
     return send_from_directory("website", "index.html")
 
 
+@app.route("/start", methods=["GET"])
+def public_onboarding():
+    """Password-free, no-payment setup. Nothing is persisted server-side here."""
+    return render_template("public_onboarding.html")
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if not PASSWORD:
@@ -503,7 +511,7 @@ def logout():
 
 @app.before_request
 def protect():
-    if request.endpoint in ("login", "static", "stripe_webhook", "manifest", "app_icon", "legacy_claim", "public_website"):
+    if request.endpoint in ("login", "static", "stripe_webhook", "manifest", "app_icon", "legacy_claim", "public_website", "public_onboarding"):
         return
     if (request.endpoint == "home" and request.method == "GET"
             and os.getenv("AUTOPOST_PUBLIC_LANDING", "false").lower() == "true"
@@ -516,6 +524,21 @@ def protect():
             request.form.get("_csrf", ""), session.get("csrf", "missing")
         ):
             abort(403)
+
+
+@app.route("/start/import", methods=["POST"])
+def import_guest_setup():
+    """Owner-only import of browser setup; no posts or workers get scheduled."""
+    raw_text = request.form.get("setup_payload", "")
+    if not raw_text or len(raw_text) > 15000:
+        abort(400, "Choose a valid saved setup")
+    import json
+    try:
+        payload = json.loads(raw_text)
+        public_setup.import_setup(payload)
+    except (ValueError, TypeError) as exc:
+        abort(400, str(exc))
+    return redirect("/?imported=1")
 
 
 @app.route("/")
@@ -534,6 +557,8 @@ def home():
         payment_required=app_control.require_payment(), paid=app_control.allowed(),
         preview_mode=preview_mode(), settings=app_control.get_settings(),
         plans=automation_setup.list_plans(),
+        imported_setups=public_setup.list_setups(),
+        imported=(request.args.get("imported") == "1"),
     )
 
 
