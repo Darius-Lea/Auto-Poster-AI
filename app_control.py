@@ -223,6 +223,9 @@ def claim_run(requested_mode: str, now: int | None = None) -> dict:
                 source = "status"
             else:
                 return {"run": False, "reason": source + " posting disabled"}
+        if requested_mode == "publish-and-check" and not s["status_enabled"]:
+            # Do not silently continue custody/release checks after they were disabled.
+            requested_mode = "publish"
         interval = s[INTERVAL_KEYS[source]] * 60
         previous = c.execute(
             "SELECT last_claimed_at FROM publishing_claims "
