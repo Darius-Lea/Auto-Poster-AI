@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1220">
+<link rel="manifest" href="/manifest.webmanifest">
+<title>Auto Poster AI · Automation Setup</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;--bg:#0b1220;--card:#162639;--line:#385064;--text:#f2f7fc;--muted:#afc0d0;--green:#c8f68a}
+*{box-sizing:border-box}body{background:radial-gradient(circle at 95% 0%,#20455a80,transparent 40%),var(--bg);color:var(--text);margin:0;line-height:1.5}
+a{color:var(--green);text-decoration:none}a:hover{text-decoration:underline}.wrap{max-width:1120px;margin:auto;padding:24px 20px 90px}.header{display:flex;justify-content:space-between;gap:15px;align-items:center;margin:10px 0 31px}.brand{display:flex;gap:9px;align-items:center;font-weight:850;letter-spacing:-.4px;font-size:18px}.brand .mark{display:grid;place-items:center;background:#28415b;padding:10px;border-radius:12px;color:var(--green)}.nav{display:flex;gap:20px;font-size:13px;font-weight:650}.nav a{color:#bcd0df}
+h1{font-size:clamp(29px,4vw,42px);letter-spacing:-1.6px;line-height:1.14;margin:5px 0 8px}h2{font-size:20px;margin:0 0 8px}h3{font-size:16px;margin:0 0 7px}p{color:var(--muted);font-size:14px;line-height:1.6;margin:8px 0 18px}.eyebrow{font-size:11px;letter-spacing:1px;color:var(--green);font-weight:800;text-transform:uppercase}
+.grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:18px;align-items:start}
+.card{border:1px solid var(--line);border-radius:18px;padding:23px;background:linear-gradient(145deg,#1a2b40,#142033);margin:17px 0}
+label{display:block;font-size:13px;font-weight:700;margin:16px 0 6px}input,select,textarea{width:100%;padding:13px;border:1px solid #486076;background:#0b1829;color:white;border-radius:11px;font:inherit;font-size:14px}textarea{min-height:96px;resize:vertical}.hint{display:block;font-size:11px;color:#9db3c6;font-weight:400;margin-top:6px}
+.button,button{font:inherit;font-weight:800;font-size:13px;padding:12px 18px;min-height:44px;border-radius:10px;background:var(--green);color:#193119;border:0;cursor:pointer;display:inline-flex;gap:9px;align-items:center;justify-content:center;text-decoration:none}
+.button:hover{background:#dcffad;text-decoration:none}.outline{background:#26374b;color:#e7eef5;border:1px solid #52687d}.outline:hover{background:#33495c;text-decoration:none}.full{width:100%}
+.notice{display:flex;gap:13px;padding:16px;border:1px solid #667249;background:#29392d;border-radius:15px;margin:21px 0}.notice svg{color:var(--green)}.notice strong{font-size:14px}.notice p{margin:5px 0 0;font-size:12px}
+.plan{border:1px solid #3b5063;border-radius:14px;padding:17px;margin:14px 0;background:#16283c}.split{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.pill{font-size:11px;border-radius:30px;background:#35495d;color:#d6e7f5;padding:6px 10px;font-weight:750}.plan p{margin:7px 0;font-size:13px}.actions{display:flex;gap:8px;margin-top:13px;flex-wrap:wrap}.actions form{margin:0}.actions button{min-height:38px;padding:9px 12px}.empty{border:1px dashed #537086;border-radius:13px;padding:20px;font-size:13px;color:var(--muted);text-align:center}.footer{color:#8fa3b5;font-size:11px;margin-top:28px}
+@media(max-width:800px){.grid{grid-template-columns:1fr}.nav{gap:11px;flex-wrap:wrap}.card{padding:18px}.wrap{padding:16px 15px 70px}.header{align-items:flex-start}.header .brand{font-size:16px}}
+</style></head><body>
+{% include "_icons.html" %}
+<div class="wrap">
+<header class="header">
+ <div class="brand"><span class="mark"><svg class="icon icon-lg"><use href="#ico-arrow-up-right"/></svg></span>Auto Poster AI</div>
+ <nav class="nav" aria-label="Site navigation"><a href="/">Dashboard</a><a href="/pages">Pages</a><a href="/control">Settings</a></nav>
+</header>
+<div class="eyebrow">SET UP BEFORE YOU PAY</div>
+<h1>Build your automation.</h1>
+<p>Design your content workflow, choose its destination, and save your preferences now. No subscription is needed to plan. Nothing begins publishing until the integration is available, you have active access, and you explicitly activate it.</p>
+<div class="notice" role="status">
+ <svg class="icon icon-lg"><use href="#ico-shield"/></svg>
+ <div><strong>Planning mode — no live publishing</strong>
+ <p>Saved workflows are drafts, not running automations. Even after paying, they must be reviewed and intentionally activated once the relevant connector is ready. {% if preview_mode %}This free Render test server cannot guarantee permanent storage.{% endif %}</p></div>
+</div>
+<div class="grid">
+<section class="card" aria-label="Automation plan editor">
+<h2>{{'Edit your setup' if editing else 'New automation plan'}}</h2>
+<p>Use plain language. Your preferences will be saved with this setup, even before you subscribe.</p>
+<form method="post" action="/automations">
+ <input type="hidden" name="_csrf" value="{{csrf}}">
+ {% if editing %}<input type="hidden" name="plan_id" value="{{editing.id}}">{% endif %}
+ <label for="name">Give this automation a name</label>
+ <input id="name" name="name" type="text" required minlength="2" maxlength="80" value="{{editing.name if editing else ''}}" placeholder="Example: Daily shop updates">
+ <label for="topic">What content should it publish?</label>
+ <textarea id="topic" name="topic" required minlength="2" maxlength="300" placeholder="Example: Product launches, store hours and weekend promotions. Keep the tone clear and friendly.">{{editing.topic if editing else ''}}</textarea>
+ <span class="hint">You control the topic and tone. No AI posts are generated by saving a plan.</span>
+ <label for="kind">Where will the content come from?</label>
+ <select id="kind" name="kind" required>
+  {% for key,label in kinds.items() %}
+  <option value="{{key}}" {{'selected' if editing and editing.kind==key}}>{{label}}</option>
+  {% endfor %}
+ </select>
+ <div id="website-fields" hidden>
+  <label for="source_url">Approved website or feed URL</label>
+  <input id="source_url" name="source_url" type="url" value="{{editing.source_url if editing else ''}}" placeholder="https://example.com/updates">
+  <span class="hint">Saving this URL doesn't start monitoring or grant rights to reuse its content.</span>
+ </div>
+ <label for="destination">Where should it post?</label>
+ <select name="destination" id="destination" required>
+  <option value="facebook_later" {{'selected' if not editing or editing.destination=='facebook_later'}}>Facebook Page — choose after connecting</option>
+  <option value="draft_later" {{'selected' if editing and editing.destination=='draft_later'}}>Drafts only — review before publishing</option>
+  {% for pg in pages %}
+  {% if pg.can_publish %}
+  <option value="page:{{pg.page_id}}" {{'selected' if editing and editing.destination=='page:' ~ pg.page_id}}>{{pg.name}} — Facebook Page</option>
+  {% endif %}
+  {% endfor %}
+ </select>
+ <span class="hint">Page access can be connected and confirmed later. We never assume a destination for live posts.</span>
+ <label for="cadence">How often?</label>
+ <select id="cadence" name="cadence" required>
+  <option value="daily" {{'selected' if not editing or editing.cadence=='daily'}}>Once per day</option>
+  <option value="twice_daily" {{'selected' if editing and editing.cadence=='twice_daily'}}>Twice per day</option>
+  <option value="three_daily" {{'selected' if editing and editing.cadence=='three_daily'}}>Three times daily</option>
+  <option value="weekly" {{'selected' if editing and editing.cadence=='weekly'}}>Once per week</option>
+ </select>
+ <label for="review_mode">How much control do you want?</label>
+ <select id="review_mode" name="review_mode" required>
+  <option value="approve_first" {{'selected' if not editing or editing.review_mode=='approve_first'}}>Let me approve every post first</option>
+  <option value="autopilot_when_supported" {{'selected' if editing and editing.review_mode=='autopilot_when_supported'}}>Autopilot after I explicitly enable it</option>
+ </select>
+ <p class="hint">Automatic publishing requires compatible permissions and a paid subscription. This selection is only your future preference.</p>
+ <button class="button full" type="submit"><svg class="icon"><use href="#ico-check"/></svg>{{'Save changes' if editing else 'Save automation setup'}}</button>
+ {% if editing %}<p style="text-align:center"><a href="/automations">Cancel editing</a></p>{% endif %}
+</form>
+</section>
+<section class="card">
+ <h2>Your saved setups</h2>
+ <p>{{plans|length}} automation {{'plan' if plans|length==1 else 'plans'}} ready for you to configure further.</p>
+ {% for p in plans %}
+ <article class="plan">
+  <div class="split"><h3>{{p.name}}</h3><span class="pill">Setup only</span></div>
+  <p>{{p.topic}}</p>
+  <p><b>Content:</b> {{kinds.get(p.kind,p.kind)}}{% if p.source_url %} · {{p.source_url}}{% endif %}</p>
+  <p><b>Frequency:</b> {{p.cadence.replace('_',' ')|title}}</p>
+  <p><b>Destination:</b> {% if p.destination == 'facebook_later' %}Facebook Page — connect later{% elif p.destination == 'draft_later' %}Drafts only{% else %}Connected Page {{p.destination[5:]}}{% endif %}</p>
+  <p><b>Approval:</b> {{'Review each post' if p.review_mode=='approve_first' else 'Autopilot after approval and activation'}}</p>
+  <div class="actions">
+   <a class="button outline" href="/automations?edit={{p.id}}"><svg class="icon icon-sm"><use href="#ico-pencil"/></svg>Edit setup</a>
+   <form method="post" action="/automations/{{p.id}}/delete"><input type="hidden" name="_csrf" value="{{csrf}}"><button type="submit" class="outline" onclick="return confirm('Delete this draft workflow?')">Delete</button></form>
+  </div>
+ </article>
+ {% else %}
+ <div class="empty"><svg class="icon icon-lg"><use href="#ico-file"/></svg><p>No saved automations yet. Fill out the form to build your first one at no cost.</p></div>
+ {% endfor %}
+ <div class="notice" style="background:#202c3d;border-color:#3e5970">
+  <svg class="icon icon-lg"><use href="#ico-lock"/></svg>
+  <div><strong>How activation will work</strong><p>Connect the relevant accounts, preview content, subscribe to a paid plan, and deliberately activate a supported workflow. Billing alone never starts an automation.</p></div>
+ </div>
+</section>
+</div>
+<p class="footer">Private owner beta · Do not use this free service as durable storage for customer data.</p>
+</div>
+<script>
+const kind=document.getElementById('kind');
+const website=document.getElementById('website-fields');
+const url=document.getElementById('source_url');
+function updateSource(){const on=kind.value==='website';website.hidden=!on;url.required=on;}
+kind.addEventListener('change',updateSource);updateSource();
+</script>
+</body></html>
