@@ -20,6 +20,7 @@ ALLOWED_MODES = {
     "publish-wanted": "warrant",
     "publish-case": "case",
     "check-status": "status",
+    "catchup": "booking",
 }
 INTERVAL_KEYS = {
     "booking": "booking_interval_minutes",
@@ -226,6 +227,10 @@ def claim_run(requested_mode: str, now: int | None = None) -> dict:
         if requested_mode == "publish-and-check" and not s["status_enabled"]:
             # Do not silently continue custody/release checks after they were disabled.
             requested_mode = "publish"
+        if requested_mode == "catchup":
+            return {"run": True, "mode": "catchup",
+                    "limit": s["max_posts_per_run"], "batch_size": s["batch_size"],
+                    "release_enabled": bool(s["release_enabled"]), "reason": "Authorized catch-up"}
         interval = s[INTERVAL_KEYS[source]] * 60
         previous = c.execute(
             "SELECT last_claimed_at FROM publishing_claims "
