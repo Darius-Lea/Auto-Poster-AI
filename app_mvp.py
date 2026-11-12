@@ -23,6 +23,7 @@ from flask import Flask, abort, flash, redirect, render_template, render_templat
 
 import app_control
 import meta_accounts
+import automation_setup
 
 load_dotenv()
 app = Flask(__name__)
@@ -83,6 +84,7 @@ def init_db():
         )""")
     app_control.init()
     meta_accounts.init()
+    automation_setup.init()
 
 
 def require_login():
@@ -110,7 +112,7 @@ def publish_to_facebook(text):
     return "meta:" + FacebookClient.from_env().publish_message(text)
 
 
-def claim_due(now=None):
+def claim_due(now=None, *, drafts_only=False):
     """Claim one due post before any outbound call. Unknown responses stay on hold."""
     now = now or datetime.now(timezone.utc)
     with LOCK:
@@ -118,7 +120,8 @@ def claim_due(now=None):
             c.execute("BEGIN IMMEDIATE")
             row = c.execute(
                 "SELECT * FROM app_posts WHERE status='scheduled' AND due_at<=? "
-                "ORDER BY due_at, id LIMIT 1",
+                + ("AND platform='draft' " if drafts_only else "")
+                + "ORDER BY due_at, id LIMIT 1",
                 (now.isoformat(timespec="seconds"),),
             ).fetchone()
             if row:
@@ -142,17 +145,15 @@ def next_recurrence_due(last_due, frequency, zone_name, now):
 
 def run_due(now=None):
     """Run due jobs only while the server confirms an active entitlement."""
-    if not app_control.allowed():
-        return 0
     handled = 0
     now = now or datetime.now(timezone.utc)
     for _ in range(MAX_POSTS_PER_RUN):
-        job = claim_due(now)
+        job = claim_due(now, drafts_only=not app_control.allowed())
         if job is None:
             break
         handled += 1
         state, remote, error = "needs_review", None, None
-        if not app_control.allowed():
+        if not app_control.allowed() and job["platform"] != "draft":
             with db() as c:
                 c.execute("UPDATE app_posts SET status='scheduled' WHERE id=? AND status='sending'", (job["id"],))
             break
@@ -414,13 +415,13 @@ a{color:#c7f78b}.tag{display:inline-block;padding:4px 9px;border-radius:40px;bac
 </style></head><body><p><a href="/">← Back to Post</a></p>
 <h1>Watch a website</h1>
 {% if preview_mode %}
-<p style="padding:13px;border:1px solid #856b3e;border-radius:12px;background:#393429"><b>Coming soon in this free preview.</b> Website monitoring does not run here. The form below is disabled so you don't mistake a saved request for an active automation.</p>
+<p style="padding:13px;border:1px solid #856b3e;border-radius:12px;background:#393429"><b>Plan your source before subscribing.</b> Saving a URL records a future workflow request only. This preview will not monitor, scrape or publish from websites.</p>
 {% else %}
 <p>Tell Auto Poster AI what source you want to monitor. This is for <b>new content</b>, not repeating the same message.</p>{% endif %}
 <section>
 <h2>New website source</h2>
 <form method="post" action="/website">
-<fieldset {% if preview_mode %}disabled{% endif %} style="border:0;padding:0;margin:0">
+<fieldset style="border:0;padding:0;margin:0">
 <input type="hidden" name="_csrf" value="{{csrf}}">
 <label for="url">Website or feed URL</label>
 <input id="url" name="url" type="url" required placeholder="https://example.org/adoptions">
@@ -433,7 +434,7 @@ a{color:#c7f78b}.tag{display:inline-block;padding:4px 9px;border-radius:40px;bac
 </select>
 <p><small>Only use sources you have permission to reuse. New-source verification,
 duplicate checks, and connection approval will be required before publishing.</small></p>
-<button type="submit">{{'Not available in free preview' if preview_mode else 'Save website request'}}</button></fieldset></form></section>
+<button type="submit">Save website plan</button></fieldset></form></section>
 <section><h2>Website requests</h2>
 {% for r in requests %}
 <div class="item"><b>{{r.url}}</b><p>{{r.topic or 'All approved updates'}} · {{'Whenever new content appears' if r.cadence=='new' else 'Daily summary'}}</p>
@@ -454,8 +455,7 @@ def validate_website_url(url):
 @app.route("/website", methods=["GET", "POST"])
 def website_requests():
     if request.method == "POST":
-        if preview_mode():
-            abort(403, "Website monitoring is not available in this free preview")
+        # A URL submission only saves setup intent. No fetching or publishing.
         url = request.form.get("url", "").strip()
         topic = request.form.get("topic", "").strip()
         cadence = request.form.get("cadence", "new")
@@ -533,6 +533,7 @@ def home():
         other_apps=("instagram", "tiktok", "youtube", "linkedin", "pinterest", "threads", "x"),
         payment_required=app_control.require_payment(), paid=app_control.allowed(),
         preview_mode=preview_mode(), settings=app_control.get_settings(),
+        plans=automation_setup.list_plans(),
     )
 
 
@@ -568,8 +569,9 @@ def selected_destinations(form):
 
 @app.route("/schedule", methods=["POST"])
 def schedule():
-    if not app_control.allowed():
-        abort(402, "An active subscription is required to schedule or publish")
+    # Building plans and drafts is free. Live delivery requires server-side
+    # entitlement AND explicit subsequent activation after setup.
+    # Setup-only posts never auto-activate on a payment webhook.
     content = request.form.get("content", "").strip()
     if not content or len(content) > 10000:
         abort(400, "Write a post before scheduling")
@@ -577,8 +579,6 @@ def schedule():
         targets = selected_destinations(request.form)
     except ValueError as exc:
         abort(400, str(exc))
-    if preview_mode() and any(platform != "draft" for platform, _, _ in targets):
-        abort(403, "Only drafts are available in free preview mode")
     frequency = request.form.get("frequency", "once")
     if frequency not in ("once", "daily", "weekly"):
         abort(400, "Invalid posting frequency")
@@ -601,9 +601,16 @@ def schedule():
             supported = (platform == "draft"
                          or (platform == "facebook" and facebook_ready)
                          or platform == "facebook_page")
-            status = "scheduled" if supported else "needs_connection"
+            # A setup draft never becomes runnable merely because someone pays
+            # or an integration is later connected. Activation is a separate step.
+            if platform == "draft":
+                status = "scheduled"
+            elif preview_mode() or not app_control.allowed():
+                status = "setup_only"
+            else:
+                status = "scheduled" if supported else "needs_connection"
             series_id = None
-            if frequency != "once" and supported:
+            if frequency != "once" and (supported or status == "setup_only"):
                 cursor = c.execute(
                     "INSERT INTO app_series(content,platform,frequency,time_zone,page_id) VALUES(?,?,?,?,?)",
                     (content, platform, frequency, zone_name, page_id),
@@ -618,6 +625,67 @@ def schedule():
     return redirect("/")
 
 
+@app.route("/automations", methods=["GET", "POST"])
+def automations():
+    """Pre-pay planning area; no automation setup route starts a worker."""
+    if request.method == "POST":
+        try:
+            chosen_id = request.form.get("plan_id", "").strip()
+            plan_id = int(chosen_id) if chosen_id else None
+            automation_setup.save(request.form, plan_id=plan_id)
+        except (ValueError, TypeError) as exc:
+            abort(400, str(exc))
+        return redirect("/automations")
+    plans = automation_setup.list_plans()
+    chosen = request.args.get("edit", "", type=str)
+    editing = next((p for p in plans if str(p["id"]) == chosen), None)
+    pages = meta_accounts.list_pages(meta_accounts.WORKSPACE)
+    return render_template(
+        "automations.html", csrf=session["csrf"], plans=plans, editing=editing,
+        pages=pages, preview_mode=preview_mode(), paid=app_control.allowed(),
+        kinds=automation_setup.KINDS,
+    )
+
+
+@app.route("/automations/<int:plan_id>/delete", methods=["POST"])
+def automations_delete(plan_id):
+    automation_setup.delete(plan_id)
+    return redirect("/automations")
+
+
+@app.route("/activate/<int:post_id>", methods=["POST"])
+def activate_saved_post(post_id):
+    """A deliberate post-setup action, not an automatic consequence of payment."""
+    if preview_mode():
+        abort(403, "Publishing is disabled on the free preview")
+    if not app_control.allowed():
+        abort(402, "Subscribe before activating external publishing")
+    now = datetime.now(timezone.utc)
+    with db() as c:
+        c.execute("BEGIN IMMEDIATE")
+        row = c.execute("SELECT * FROM app_posts WHERE id=?", (post_id,)).fetchone()
+        if not row or row["status"] != "setup_only":
+            abort(404, "No unpublished setup plan found")
+        if row["platform"] == "facebook":
+            if not (os.getenv("META_PAGE_ID") and os.getenv("META_PAGE_ACCESS_TOKEN")):
+                abort(409, "Connect the Facebook Page before activation")
+        elif row["platform"] == "facebook_page":
+            try:
+                meta_accounts.get_page_token(meta_accounts.WORKSPACE, row["page_id"])
+            except (PermissionError, ValueError):
+                abort(409, "Reconnect the selected Page before activation")
+        else:
+            abort(409, "This platform cannot publish yet")
+        # A plan created for a time already past should not surprise-publish
+        # the moment payment succeeds. User must choose a fresh future time.
+        due = datetime.fromisoformat(row["due_at"])
+        if due <= now:
+            abort(409, "This posting time has passed. Create a new schedule to activate.")
+        c.execute("UPDATE app_posts SET status='scheduled' WHERE id=? AND status='setup_only'",
+                  (post_id,))
+    return redirect("/#posts")
+
+
 @app.route("/cancel/<int:post_id>", methods=["POST"])
 def cancel(post_id):
     with db() as c:
@@ -625,10 +693,10 @@ def cancel(post_id):
         if post and post["series_id"]:
             c.execute("UPDATE app_series SET active=0 WHERE id=?", (post["series_id"],))
             c.execute("UPDATE app_posts SET status='cancelled' "
-                      "WHERE series_id=? AND status='scheduled'", (post["series_id"],))
+                      "WHERE series_id=? AND status IN ('scheduled','setup_only')", (post["series_id"],))
         else:
             c.execute("UPDATE app_posts SET status='cancelled' "
-                      "WHERE id=? AND status='scheduled'", (post_id,))
+                      "WHERE id=? AND status IN ('scheduled','setup_only')", (post_id,))
     return redirect("/")
 
 
