@@ -22,6 +22,7 @@ from dotenv import load_dotenv
 from flask import Flask, abort, flash, redirect, render_template_string, request, session, url_for, jsonify, Response, send_from_directory
 
 import app_control
+import meta_accounts
 
 load_dotenv()
 app = Flask(__name__)
@@ -62,6 +63,11 @@ def init_db():
             c.execute("ALTER TABLE app_posts ADD COLUMN website_url TEXT")
         if "frequency" not in columns:
             c.execute("ALTER TABLE app_posts ADD COLUMN frequency TEXT NOT NULL DEFAULT 'once'")
+        if "page_id" not in columns:
+            c.execute("ALTER TABLE app_posts ADD COLUMN page_id TEXT")
+        series_columns = {row[1] for row in c.execute("PRAGMA table_info(app_series)")}
+        if "page_id" not in series_columns:
+            c.execute("ALTER TABLE app_series ADD COLUMN page_id TEXT")
         c.execute("CREATE UNIQUE INDEX IF NOT EXISTS unique_series_due ON app_posts(series_id,due_at)")
         c.execute("""CREATE TABLE IF NOT EXISTS website_requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,6 +78,7 @@ def init_db():
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
     app_control.init()
+    meta_accounts.init()
 
 
 def require_login():
@@ -149,6 +156,11 @@ def run_due(now=None):
             if job["platform"] == "facebook":
                 remote = publish_to_facebook(job["content"])
                 state = "published"
+            elif job["platform"] == "facebook_page":
+                remote = meta_accounts.publish_message(
+                    meta_accounts.WORKSPACE, job["page_id"], job["content"]
+                )
+                state = "published"
             elif job["platform"] == "draft":
                 state = "draft_ready"
             else:
@@ -172,10 +184,10 @@ def run_due(now=None):
                     )
                     c.execute(
                         "INSERT OR IGNORE INTO app_posts"
-                        "(content,platform,due_at,status,series_id,frequency)"
-                        " VALUES(?,?,?,'scheduled',?,?)",
+                        "(content,platform,due_at,status,series_id,frequency,page_id)"
+                        " VALUES(?,?,?,'scheduled',?,?,?)",
                         (series["content"], series["platform"], next_due,
-                         series["id"], series["frequency"]),
+                         series["id"], series["frequency"], series["page_id"]),
                     )
     return handled
 
@@ -240,7 +252,7 @@ details>div{padding:0 12px 10px}
 .warning{color:#ffbdbd}
 @media(max-width:700px){.grid{grid-template-columns:1fr}header,main{padding:15px}.panel{padding:17px}h1{font-size:27px}}
 </style></head><body>
-<header><b>✳ Auto Poster AI</b><div class="row"><a href="/control">⚙ Autopilot & Billing</a><a href="/logout">Sign out</a></div></header>
+<header><b>✳ Auto Poster AI</b><div class="row"><a href="/pages">Facebook Pages</a><a href="/control">⚙ Controls</a><a href="/logout">Sign out</a></div></header>
 <main>
 <p><span class="pill">Single-owner starter · Live connections shown below</span></p>
 {% if payment_required and not paid %}<p class="note">⏸ Your subscription is not active. Posting and scheduling are disabled until payment is confirmed. <a href="/control">Manage subscription</a>.</p>{% endif %}
@@ -260,7 +272,12 @@ placeholder="Write about your latest video, a sale, an adoption, a community upd
 <span><b>Save a draft</b><small>No external publishing</small></span><span class="pill success">Ready</span></label>
 <label class="dest"><input type="checkbox" name="destinations" value="facebook">
 <span><b>Facebook Page</b><small>Text posts on your authorized Page</small></span>
-<span class="pill {{ 'success' if fb_enabled else 'pending' }}">{{ 'Ready' if fb_enabled else 'Connect first' }}</span></label>
+<span class="pill {{ 'success' if fb_enabled else 'pending' }}">{{ 'Owner Page' if fb_enabled else 'Connect first' }}</span></label>
+{% for pg in fb_pages %}
+<label class="dest"><input type="checkbox" name="facebook_pages" value="{{pg.page_id}}">
+<span><b>Facebook · {{pg.name}}</b><small>Post directly to this authorized Page</small></span><span class="pill success">Ready</span></label>
+{% endfor %}
+<p><small><a href="/pages">Connect another Facebook business Page</a>. Choose each destination separately; none is selected automatically.</small></p>
 {% for app in other_apps %}
 <label class="dest"><input type="checkbox" name="destinations" value="{{app}}">
 <span><b>{{app|title}}</b><small>Save publishing request</small></span><span class="pill pending">Needs integration</span></label>
@@ -314,6 +331,7 @@ placeholder="Write about your latest video, a sale, an adoption, a community upd
 <div class="post">
 <div class="status"><b>{{'Post to website' if p.platform == 'website' else p.platform|title}}</b><span class="pill {{'success' if p.status=='published' else 'pending' if p.status=='needs_connection' else ''}}">{{p.status.replace('_',' ')|title}}</span><small>{{p.frequency}}</small></div>
 {% if p.website_url %}<small>{{p.website_url}}</small>{% endif %}
+{% if p.page_id %}<small> · Facebook Page: {{page_names.get(p.page_id,p.page_id)}}</small>{% endif %}
 <p>{{p.content}}</p>
 <small>{{p.due_at}}</small>
 {% if p.remote_id %}<small> · Confirmed ID {{p.remote_id}}</small>{% endif %}
@@ -342,12 +360,12 @@ remove.addEventListener('click',()=>{row.remove();updateCount()});
 row.append(input,remove);websites.append(row);updateCount();
 });
 function updateCount(){
-const n=form.querySelectorAll('input[name="destinations"]:checked').length+websites.children.length;
+const n=form.querySelectorAll('input[name="destinations"]:checked,input[name="facebook_pages"]:checked').length+websites.children.length;
 document.getElementById('selected-count').textContent=n+' selected';
 }
-form.querySelectorAll('input[name="destinations"]').forEach(el=>el.addEventListener('change',updateCount));
+form.querySelectorAll('input[name="destinations"],input[name="facebook_pages"]').forEach(el=>el.addEventListener('change',updateCount));
 form.addEventListener('submit',e=>{
-if(!form.querySelector('input[name="destinations"]:checked') && !websites.children.length){
+if(!form.querySelector('input[name="destinations"]:checked,input[name="facebook_pages"]:checked') && !websites.children.length){
 e.preventDefault();alert('Choose where this post should go.');return;
 }
 if(when.value==='later'){
@@ -494,8 +512,10 @@ def home():
         counts = {r["status"]: r["n"] for r in c.execute(
             "SELECT status,COUNT(*) n FROM app_posts GROUP BY status"
         )}
+    pages = meta_accounts.list_pages(meta_accounts.WORKSPACE)
     return render_template_string(
         PAGE, posts=rows, counts=counts, csrf=session["csrf"],
+        fb_pages=pages, page_names={p["page_id"]: p["name"] for p in pages},
         fb_enabled=bool(os.getenv("META_PAGE_ID") and os.getenv("META_PAGE_ACCESS_TOKEN")),
         other_apps=("instagram", "tiktok", "youtube", "linkedin", "pinterest", "threads", "x"),
         payment_required=app_control.require_payment(), paid=app_control.allowed(),
@@ -519,8 +539,14 @@ def selected_destinations(form):
         if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
                 or len(url) > 2048):
             raise ValueError("Website URLs must use HTTPS and cannot contain credentials")
-    result = [(p, None) for p in platforms]
-    result += [("website", url) for url in websites]
+    page_ids = list(dict.fromkeys(form.getlist("facebook_pages")))
+    connected = {p["page_id"] for p in meta_accounts.list_pages(meta_accounts.WORKSPACE)
+                 if p["can_publish"]}
+    if any(page_id not in connected for page_id in page_ids):
+        raise ValueError("Choose only Facebook Pages you have connected")
+    result = [(p, None, None) for p in platforms]
+    result += [("facebook_page", None, pid) for pid in page_ids]
+    result += [("website", url, None) for url in websites]
     if not result or len(result) > 12:
         raise ValueError("Add at least one app or website")
     return result
@@ -555,21 +581,23 @@ def schedule():
         abort(400, str(exc))
     facebook_ready = bool(os.getenv("META_PAGE_ID") and os.getenv("META_PAGE_ACCESS_TOKEN"))
     with db() as c:
-        for platform, website_url in targets:
-            supported = platform == "draft" or (platform == "facebook" and facebook_ready)
+        for platform, website_url, page_id in targets:
+            supported = (platform == "draft"
+                         or (platform == "facebook" and facebook_ready)
+                         or platform == "facebook_page")
             status = "scheduled" if supported else "needs_connection"
             series_id = None
             if frequency != "once" and supported:
                 cursor = c.execute(
-                    "INSERT INTO app_series(content,platform,frequency,time_zone) VALUES(?,?,?,?)",
-                    (content, platform, frequency, zone_name),
+                    "INSERT INTO app_series(content,platform,frequency,time_zone,page_id) VALUES(?,?,?,?,?)",
+                    (content, platform, frequency, zone_name, page_id),
                 )
                 series_id = cursor.lastrowid
             c.execute(
                 "INSERT INTO app_posts"
-                "(content,platform,due_at,status,series_id,frequency,website_url)"
-                " VALUES(?,?,?,?,?,?,?)",
-                (content, platform, due, status, series_id, frequency, website_url),
+                "(content,platform,due_at,status,series_id,frequency,website_url,page_id)"
+                " VALUES(?,?,?,?,?,?,?,?)",
+                (content, platform, due, status, series_id, frequency, website_url,page_id),
             )
     return redirect("/")
 
@@ -587,6 +615,129 @@ def cancel(post_id):
                       "WHERE id=? AND status='scheduled'", (post_id,))
     return redirect("/")
 
+
+
+
+PAGES_PAGE = """
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Auto Poster AI · Facebook Pages</title>
+<style>
+:root{color-scheme:dark;font:16px -apple-system,system-ui,sans-serif}
+*{box-sizing:border-box}body{background:#101319;color:#f1f6fc;margin:0}
+main{max-width:720px;margin:auto;padding:20px 17px 60px}
+a{color:#c8f98a}h1{font-size:30px;letter-spacing:-1px}
+p,small{color:#aabbca;line-height:1.5}
+.card{background:#1c2835;border:1px solid #344758;padding:20px;border-radius:18px;margin:15px 0}
+.item{padding:14px 0;border-bottom:1px solid #3b4858;display:flex;align-items:center;gap:12px}
+.item:last-child{border:0}.item span{flex:1}.item small{display:block;font-size:12px}
+button,.action{font:inherit;display:inline-block;border:0;border-radius:11px;background:#c8f98a;color:#142018;padding:12px 18px;font-weight:750;cursor:pointer;text-decoration:none}
+button.remove{background:#374659;color:#f9e8e8;padding:10px}
+input[type=checkbox]{width:21px;height:21px;accent-color:#c8f98a}
+.tag{background:#394b59;padding:5px 9px;border-radius:35px;font-size:12px}
+</style></head><body><main>
+<a href="/">← Back to posts</a>
+<h1>Your Facebook Pages</h1>
+<p>Sign in with Facebook once, select the business Pages you manage, and then choose the exact destination when creating a post. You do not need Meta developer keys.</p>
+<section class="card"><h2>Connect pages</h2>
+{% if configured %}
+<a class="action" href="/facebook/connect">Connect with Facebook</a>
+{% else %}
+<p><b>Connection needs setup by Auto Poster AI.</b> The service owner must configure the Meta app and callback before this button works. Customers will not configure developer keys.</p>
+{% endif %}
+<p><small>Facebook grants access only to eligible Pages. Some Pages may need additional permission or to be reauthorized. Connection alone never starts automatic posting.</small></p></section>
+{% if pending %}
+<section class="card"><h2>Choose where Auto Poster AI may publish</h2>
+<form method="post" action="/facebook/activate"><input type="hidden" name="_csrf" value="{{csrf}}">
+{% for p in pending %}
+<div class="item"><input type="checkbox" id="p{{p.page_id}}" name="page_ids" value="{{p.page_id}}" {{'disabled' if not p.can_publish}}>
+<label for="p{{p.page_id}}"><b>{{p.name}}</b><small>{{'Eligible to publish' if p.can_publish else 'No permission to publish on this Page'}}</small></label></div>
+{% endfor %}
+<button type="submit">Connect selected Pages</button>
+</form></section>
+{% endif %}
+<section class="card"><h2>Connected destinations</h2>
+{% for p in pages %}
+<div class="item"><span><b>{{p.name}}</b><small>Facebook Page · ID {{p.page_id}}</small></span>
+<form method="post" action="/facebook/disconnect/{{p.page_id}}">
+<input type="hidden" name="_csrf" value="{{csrf}}">
+<button class="remove" type="submit">Disconnect</button></form></div>
+{% else %}<p>No Facebook business Pages connected through sign-in yet.</p>{% endfor %}
+</section>
+<section class="card"><h2>Already using a Page token?</h2>
+<p>Your existing single-owner Facebook publishing setup is separate and remains unchanged. This sign-in feature is the future customer path, not a replacement of your working Page credentials.</p>
+</section>
+</main></body></html>
+"""
+
+
+@app.route("/pages")
+def pages_overview():
+    return render_template_string(
+        PAGES_PAGE, csrf=session["csrf"], configured=meta_accounts.configured(),
+        pending=meta_accounts.pending_choices(meta_accounts.WORKSPACE),
+        pages=meta_accounts.list_pages(meta_accounts.WORKSPACE),
+    )
+
+
+@app.route("/facebook/connect")
+def facebook_connect():
+    if not meta_accounts.configured():
+        abort(503, "Facebook business login is not configured on this server")
+    state = secrets.token_urlsafe(40)
+    session["fb_oauth_state"] = state
+    session["fb_oauth_started"] = int(time.time())
+    return redirect(meta_accounts.login_url(state), code=302)
+
+
+@app.route("/facebook/callback")
+def facebook_callback():
+    expected = session.pop("fb_oauth_state", None)
+    started = session.pop("fb_oauth_started", 0)
+    supplied = request.args.get("state", "")
+    if (not expected or not hmac.compare_digest(expected, supplied)
+            or int(time.time()) - int(started) > 600):
+        abort(403, "Invalid or expired Facebook connection")
+    if request.args.get("error"):
+        return redirect("/pages")
+    code = request.args.get("code", "")
+    try:
+        available = meta_accounts.discover_pages(code)
+        meta_accounts.remember_pending(meta_accounts.WORKSPACE, available)
+    except (RuntimeError, ValueError) as exc:
+        app.logger.warning("Facebook connection failed: %s", str(exc))
+        abort(502, "Unable to retrieve Facebook Pages. Please try reconnecting.")
+    return redirect("/pages")
+
+
+@app.route("/facebook/activate", methods=["POST"])
+def facebook_activate():
+    page_ids = request.form.getlist("page_ids")
+    try:
+        meta_accounts.activate_pages(meta_accounts.WORKSPACE, page_ids)
+    except (ValueError, PermissionError) as exc:
+        abort(400, str(exc))
+    return redirect("/pages")
+
+
+@app.route("/facebook/disconnect/<page_id>", methods=["POST"])
+def facebook_disconnect(page_id):
+    try:
+        removed = meta_accounts.disconnect(meta_accounts.WORKSPACE, page_id)
+    except ValueError as exc:
+        abort(400, str(exc))
+    if removed:
+        with db() as c:
+            c.execute("""
+                UPDATE app_posts SET status='needs_connection'
+                WHERE platform='facebook_page' AND page_id=?
+                  AND status='scheduled'
+            """, (page_id,))
+            c.execute("""
+                UPDATE app_series SET active=0
+                WHERE platform='facebook_page' AND page_id=?
+            """, (page_id,))
+    return redirect("/pages")
 
 
 CONTROL_PAGE = """
