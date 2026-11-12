@@ -10,6 +10,9 @@ on:
       - "tests/test_preview_mode.py"
       - "tests/test_unpaid_setup.py"
       - "automation_setup.py"
+      - "public_setup.py"
+      - "templates/public_onboarding.html"
+      - "tests/test_public_onboarding.py"
       - "templates/automations.html"
       - "templates/_icons.html"
       - "website/index.html"
@@ -37,7 +40,7 @@ jobs:
       - name: Install app dependencies
         run: pip install -r requirements-app.txt
       - name: Compile mobile control code
-        run: python -m compileall -q app_mvp.py app_control.py automation_setup.py meta_accounts.py control_bridge.py app_mvp_wsgi.py
+        run: python -m compileall -q app_mvp.py app_control.py automation_setup.py public_setup.py meta_accounts.py control_bridge.py app_mvp_wsgi.py
       - name: Test the subscription and autopilot gates
         run: python -m unittest discover -s tests -p 'test_app_control.py' -v
       - name: Run existing publishing regressions
