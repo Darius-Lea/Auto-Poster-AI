@@ -7,10 +7,16 @@ GitHub Actions workflow continues unchanged on `main`.
 
 - Password-protected mobile-friendly web dashboard
 - Compose arbitrary text (news, personal, business, pet adoption, creators, etc.)
+- Tap **+ Add apps or websites** to choose multiple destinations in one post
+- Select **Post now / Schedule later** and **Once / Daily / Weekly**
+- Repeating supported posts reschedules the same text after a confirmed success; click **Stop repeating** to halt a series
+- Add up to five HTTPS website addresses; they stay **Needs connection** until an approved publishing integration is built
 - Schedule text-only posts to an authorized Facebook **Page** using the
   existing official Meta Page API client
 - Schedule posts to the **draft** destination: those are saved internally and
   marked draft_ready when due, **not** published to a social network
+- Save intended Instagram, TikTok, YouTube, LinkedIn, Pinterest, Threads, X and
+  arbitrary website destinations as **Needs connection**. These are NOT sent.
 - See queued, published, needs-review and cancelled statuses
 - Background server scheduler running every ~20 seconds while server is up
 - Manual cancellation of scheduled posts
@@ -43,9 +49,13 @@ all visitors and it does not isolate tenants. Deploy privately for the owner onl
    `gunicorn --workers 1 --threads 2 --bind 127.0.0.1:8080 app_mvp_wsgi:app`.
    Set this back to true behind HTTPS.
 
-Schedule with the time picker on the dashboard. Times are converted from the
-device's local zone to UTC and retained in the database. A job is picked up on
-the next scheduler pass after its due time. Leave the app running.
+Use the **Post** composer and open **+ Add apps or websites**. Pick one or more
+apps, add HTTPS website URLs if desired, set how often, then Post now or choose
+an exact local date/time. The server stores UTC for the due time and the local
+timezone for repeating schedules. Daily and weekly repeats create the next job
+only after the previous delivery is confirmed or a draft is ready; errors
+and uncertain outcomes hold the series rather than silently reposting.
+Leave the server running for unattended delivery.
 
 **Important:** Facebook posting publishes to the configured Page when due.
 Use a test Page, or verify the content and schedule carefully before testing
