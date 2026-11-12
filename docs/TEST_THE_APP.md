@@ -10,7 +10,10 @@ GitHub Actions workflow continues unchanged on `main`.
 - Tap **+ Add apps or websites** to choose multiple destinations in one post
 - Select **Post now / Schedule later** and **Once / Daily / Weekly**
 - Repeating supported posts reschedules the same text after a confirmed success; click **Stop repeating** to halt a series
-- Add up to five HTTPS website addresses; they stay **Needs connection** until an approved publishing integration is built
+- In the Post composer, **Post to my website** records a destination request,
+  but it remains **Needs connection** until a site-specific publishing integration exists
+- The separate **Watch a website** screen collects a monitoring request without
+  publishing anything. It does not yet scrape or poll the URL; it is setup only
 - Schedule text-only posts to an authorized Facebook **Page** using the
   existing official Meta Page API client
 - Schedule posts to the **draft** destination: those are saved internally and
@@ -24,8 +27,8 @@ GitHub Actions workflow continues unchanged on `main`.
 
 ## Not implemented yet
 
-No Canva connection in this build. No photo/video uploading, universal website
-scraping, RSS import, account OAuth connection wizard, Facebook personal-profile
+No Canva connection in this build. No photo/video uploading, live website
+scraping or polling, RSS import, account OAuth connection wizard, Facebook personal-profile
 posting, Instagram/YouTube/TikTok/X/LinkedIn direct publishing, real analytics,
 automatic caption generation, subscription billing, tenant accounts, or App Store
 binary. Those features are planned work, not operational here.
@@ -49,11 +52,11 @@ all visitors and it does not isolate tenants. Deploy privately for the owner onl
    `gunicorn --workers 1 --threads 2 --bind 127.0.0.1:8080 app_mvp_wsgi:app`.
    Set this back to true behind HTTPS.
 
-Use the **Post** composer and open **+ Add apps or websites**. Pick one or more
-apps, add HTTPS website URLs if desired, set how often, then Post now or choose
+Use the **Post** composer and open **+ Choose where to post**. Pick one or more
+apps, add your own website publishing destination if desired, then Post now or choose
 an exact local date/time. The server stores UTC for the due time and the local
-timezone for repeating schedules. Daily and weekly repeats create the next job
-only after the previous delivery is confirmed or a draft is ready; errors
+timezone for repeating schedules. Daily and weekly repeats are hidden in Advanced and repeat the **same text**;
+they create the next job only after the previous delivery is confirmed or a draft is ready; errors
 and uncertain outcomes hold the series rather than silently reposting.
 Leave the server running for unattended delivery.
 
@@ -83,3 +86,14 @@ Do not use Render's ephemeral filesystem for reliable scheduling.
   confirm a Facebook Page post ID.
 - The developer still needs Meta credentials and required approvals. Customers
   will use OAuth in the future customer version, not developer keys.
+
+## Website source versus destination
+
+- **Post to my website** means delivering content **to** a connected CMS/blog.
+  This starter only records the request; it cannot post to arbitrary URLs.
+- **Watch a website** means monitoring a permitted source for new items.
+  It has its own `/website` setup screen and separate table; **no polling,
+  scraping or auto-publishing happens yet**. A URL alone does not authorize
+  scraping, copying media, or posting.
+- A brand-new text post defaults to **Once**. The advanced Daily/Weekly option
+  explicitly repeats identical content; it does not synthesize fresh posts.
