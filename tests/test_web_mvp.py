@@ -33,6 +33,7 @@ class WebMVPTests(unittest.TestCase):
         with self.app.db() as c:
             c.execute("DELETE FROM app_posts")
             c.execute("DELETE FROM app_series")
+            c.execute("DELETE FROM website_requests")
 
     def login(self, client):
         r = client.post("/login", data={"password": "a-long-test-password-123"})
@@ -118,6 +119,34 @@ class WebMVPTests(unittest.TestCase):
                          ["needs_connection", "needs_connection"])
         self.assertTrue(all(r["series_id"] is None for r in rows))
         self.assertEqual(rows[0]["website_url"], "https://example.org/publisher")
+
+    def test_website_autopilot_is_only_a_setup_request(self):
+        with self.app.app.test_client() as client:
+            csrf = self.login(client)
+            page = client.get("/website")
+            self.assertEqual(page.status_code, 200)
+            self.assertIn(b"Watch a website", page.data)
+            result = client.post("/website", data={
+                "_csrf": csrf,
+                "url": "https://shelter.example.org/pets",
+                "topic": "New pet adoptions",
+                "cadence": "new",
+            })
+            self.assertEqual(result.status_code, 302)
+        with self.app.db() as c:
+            request = c.execute("SELECT url,topic,cadence,status FROM website_requests").fetchone()
+            posts = c.execute("SELECT COUNT(*) FROM app_posts").fetchone()[0]
+        self.assertEqual(request["status"], "needs_integration")
+        self.assertEqual(request["cadence"], "new")
+        self.assertEqual(posts, 0)
+
+    def test_website_watcher_requires_https(self):
+        with self.app.app.test_client() as client:
+            csrf = self.login(client)
+            result = client.post("/website", data={
+                "_csrf": csrf, "url": "http://example.org", "cadence": "daily"
+            })
+            self.assertEqual(result.status_code, 400)
 
     def test_invalid_website_rejected(self):
         with self.app.app.test_client() as client:
