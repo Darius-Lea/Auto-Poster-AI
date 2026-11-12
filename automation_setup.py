@@ -45,7 +45,7 @@ def init():
         c.execute("CREATE INDEX IF NOT EXISTS automation_setup_owner ON automation_setup_plans(workspace_id)")
 
 
-def validate(values):
+def validate(values, workspace_id=WORKSPACE):
     name = str(values.get("name", "")).strip()
     topic = str(values.get("topic", "")).strip()
     kind = str(values.get("kind", "")).strip()
@@ -65,13 +65,17 @@ def validate(values):
     if dest.startswith("page:"):
         import meta_accounts
         chosen = dest.split(":", 1)[1]
-        if chosen not in {p["page_id"] for p in meta_accounts.list_pages(WORKSPACE)
+        if chosen not in {p["page_id"] for p in meta_accounts.list_pages(workspace_id)
                           if p["can_publish"]}:
             raise ValueError("That Page is not connected to this workspace")
     if kind == "website":
         parsed = urlparse(url)
+        try:
+            port = parsed.port
+        except ValueError as exc:
+            raise ValueError("Enter a valid HTTPS source address") from exc
         if (parsed.scheme != "https" or not parsed.hostname or parsed.username
-                or parsed.password or len(url) > 1500 or parsed.port not in (None, 443)
+                or parsed.password or len(url) > 1500 or port not in (None, 443)
                 or parsed.hostname.lower() in {"localhost"}
                 or parsed.hostname.lower().endswith((".local", ".internal"))):
             raise ValueError("Enter a permitted public HTTPS website/feed URL")
@@ -84,7 +88,7 @@ def validate(values):
 def save(values, workspace_id=WORKSPACE, plan_id=None):
     if not workspace_id or len(workspace_id) > 128:
         raise ValueError("Unknown workspace")
-    clean = validate(values)
+    clean = validate(values, workspace_id)
     now = int(time.time())
     with connect() as c:
         if plan_id is None:
