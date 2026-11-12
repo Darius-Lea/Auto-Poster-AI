@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1220">
+<meta name="description" content="Auto Poster AI helps creators and businesses schedule content, control automated workflows, and keep their publishing plans organized.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Auto Poster AI — Your content, on autopilot">
+<meta property="og:description" content="One place to plan posts, run approved automations and understand what works.">
+<title>Auto Poster AI · Your content, on autopilot</title>
+<style>
+:root{--bg:#0b1220;--bg2:#111e2d;--card:#162539;--ink:#f6fafb;--muted:#b3c3d0;--line:#2c4358;--lime:#c5fb86;--blue:#89d1ff;--soft:#dceaff;--dark:#07101a;scroll-behavior:smooth;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:dark}
+*{box-sizing:border-box}body{background:var(--bg);color:var(--ink);margin:0;line-height:1.55}a{color:inherit;text-decoration:none}button{font:inherit}img{max-width:100%}
+.wrap{max-width:1170px;margin:auto;padding:0 24px}.nav{position:sticky;top:0;z-index:20;border-bottom:1px solid #ffffff17;background:#0b1220ee;backdrop-filter:blur(18px)}
+.nav-inner{height:76px;display:flex;align-items:center;justify-content:space-between;gap:18px}.brand{display:flex;align-items:center;gap:11px;font-size:18px;font-weight:850;letter-spacing:-.6px;white-space:nowrap}.logo{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(145deg,#324b75,#152338);color:var(--lime);font-size:24px;box-shadow:inset 0 0 0 1px #7996ba55}
+.nav-links{display:flex;align-items:center;gap:26px}.nav-links a:not(.btn){font-weight:600;color:#cad4e1;font-size:14px}.nav-links a:hover,.foot a:hover{color:var(--lime)}.nav-toggle{display:none;border:1px solid var(--line);border-radius:10px;background:var(--card);padding:9px;color:var(--ink);cursor:pointer}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;padding:13px 19px;min-height:45px;border-radius:11px;font-weight:750;font-size:14px;white-space:nowrap;border:1px solid transparent;background:var(--lime);color:#182617;transition:transform .15s ease,box-shadow .15s ease}
+.btn:hover{transform:translateY(-1px);box-shadow:0 8px 32px #c5fb8622}.btn.outline{background:#ffffff0a;color:var(--ink);border-color:var(--line)}
+.hero{position:relative;overflow:hidden;padding:104px 0 115px;background:radial-gradient(ellipse at 75% 27%,#28678a3d,transparent 42%),radial-gradient(ellipse at 20% 60%,#437a4c2b,transparent 45%)}
+.hero-grid{display:grid;grid-template-columns:1.02fr .98fr;align-items:center;gap:46px}
+.eyebrow{display:inline-flex;gap:9px;align-items:center;background:#bafa8616;color:var(--lime);border:1px solid #c5fb8652;border-radius:100px;padding:7px 13px;text-transform:uppercase;font-size:11px;font-weight:850;letter-spacing:1px}
+h1{font-size:clamp(43px,5.4vw,72px);letter-spacing:-3.5px;line-height:1.08;margin:23px 0}h1 span{color:var(--lime)}.hero p{max-width:570px;font-size:18px;color:#c7d4df}.actions{display:flex;flex-wrap:wrap;gap:12px;margin:30px 0 16px}.tiny{color:#90a9be;font-size:12px}
+.canvas{padding:15px;border:1px solid #42627b;border-radius:25px;background:linear-gradient(145deg,#263e57,#101d2f);box-shadow:0 40px 95px #020914a6;transform:rotate(1.3deg)}
+.app{border-radius:17px;background:#f8fbff;color:#12243a;padding:25px;min-height:400px;font-size:14px}
+.appheader{display:flex;align-items:center;justify-content:space-between}.appheader strong{font-size:16px}.mark{border-radius:100px;background:#e6f9d7;color:#316036;padding:6px 12px;font-size:10px;font-weight:800}.app h3{font-size:28px;letter-spacing:-1.2px;margin:29px 0 3px}.app .sub{color:#6a7f94;margin:0 0 17px}.health{display:flex;justify-content:space-between;align-items:center;background:#eaf6eb;border:1px solid #d7ebd7;border-radius:15px;padding:17px 18px}.health span{font-size:12px;color:#456651}.switch{width:38px;height:22px;border-radius:50px;background:#44ad68;position:relative}.switch:before{content:"";position:absolute;right:3px;top:3px;background:white;border-radius:50%;width:16px;height:16px}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:14px 0}.metrics>div{padding:16px 9px;border:1px solid #e0e9f2;border-radius:13px;background:#fff;text-align:center}.metrics strong{display:block;font-size:21px}.metrics small{display:block;color:#6d8091}.previewposts{border:1px solid #e0e9f2;border-radius:13px;padding:13px}.previewposts b{display:block;margin-bottom:8px}.fakepost{display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px solid #e3ebf2;font-size:12px}.fakepost span{color:#60758b;flex:1}.fakepost em{font-style:normal;color:#388855}
+.section{padding:90px 0}.center{text-align:center;max-width:720px;margin:0 auto 38px}.section-title{font-size:clamp(30px,3.5vw,44px);letter-spacing:-1.6px;line-height:1.2;margin:13px 0}.lead{font-size:16px;color:var(--muted);max-width:700px}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.card{background:linear-gradient(160deg,#18293d,#111e2d);border:1px solid #33485b;border-radius:20px;padding:25px;min-height:224px}.card-icon{font-size:27px;display:grid;place-items:center;background:#c5fb8619;border-radius:13px;width:52px;height:52px;margin-bottom:16px}.card h3{font-size:19px;margin:0 0 9px}.card p{color:var(--muted);font-size:14px;margin:0}.section.alt{background:#0e1928}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}.step{padding:25px;border-left:2px solid var(--lime);background:#ffffff08;border-radius:0 18px 18px 0}.step b{color:var(--lime);font-size:12px;letter-spacing:1px}.step h3{font-size:21px;margin:8px 0}.step p{color:var(--muted);font-size:14px}
+.pricing{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;align-items:stretch}.plan{padding:25px 21px;background:#152337;border:1px solid #33465a;border-radius:19px;display:flex;flex-direction:column;min-height:365px}.plan.featured{border-color:#c5fb86aa;box-shadow:0 0 0 1px #c5fb8630;background:#1d3040}.plan h3{margin:0 0 4px;font-size:20px}.plan .who{font-size:13px;color:var(--muted);min-height:43px}.price{font-size:38px;letter-spacing:-1.5px;font-weight:850;margin:16px 0}.price small{font-size:13px;letter-spacing:0;color:var(--muted);font-weight:500}.plan ul{padding-left:18px;color:#c5d5df;font-size:13px;line-height:1.9;margin:0 0 24px;flex:1}.plan .btn{width:100%}.price-note{margin:18px auto 0;text-align:center;color:#9fb3c3;font-size:13px;max-width:800px}
+.strip{padding:40px;background:linear-gradient(110deg,#214567,#223f45);border:1px solid #54819a;border-radius:23px;display:flex;align-items:center;justify-content:space-between;gap:25px}.strip h2{font-size:30px;line-height:1.2;margin:0 0 9px;letter-spacing:-1px}.strip p{margin:0;color:#d7e6ef}
+.faq{max-width:790px;margin:0 auto}.faq details{border:1px solid #304758;background:#112133;border-radius:14px;padding:16px 20px;margin:10px 0}.faq summary{font-weight:750;cursor:pointer}.faq p{color:var(--muted);font-size:14px;margin-bottom:0}
+.foot{border-top:1px solid #ffffff16;padding:34px 0 50px;color:#a9bac8}.foot-inner{display:flex;align-items:start;justify-content:space-between;gap:24px}.foot a{font-size:13px;margin-right:15px;color:#c2d3df}.foot small{display:block;font-size:12px;margin-top:11px}
+@media(max-width:980px){.hero-grid{grid-template-columns:1fr;gap:45px}.canvas{max-width:650px}.pricing{grid-template-columns:repeat(2,1fr)}.cards{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:650px){.wrap{padding:0 17px}.nav-inner{height:67px}.nav-toggle{display:block}.nav-links{display:none;position:absolute;top:67px;left:0;right:0;flex-direction:column;align-items:stretch;padding:18px;background:var(--bg2);border-bottom:1px solid var(--line);gap:17px}.nav-links.open{display:flex}.hero{padding:63px 0}.hero h1{letter-spacing:-2.2px}.hero p{font-size:16px}.canvas{padding:8px;transform:none}.app{padding:15px;min-height:350px}.metrics strong{font-size:17px}.metrics>div{padding:12px 3px}.section{padding:65px 0}.cards,.steps,.pricing{grid-template-columns:1fr}.step{min-height:0}.strip{padding:27px;display:block}.strip .btn{margin-top:20px}.foot-inner{display:block}.foot nav{margin-top:20px}.plan{min-height:0}}
+@media(prefers-reduced-motion:reduce){:root{scroll-behavior:auto}.btn{transition:none}}
+</style>
+</head>
+<body>
+<nav class="nav" aria-label="Main navigation">
+<div class="wrap nav-inner">
+<a class="brand" href="#top" aria-label="Auto Poster AI home"><span class="logo" aria-hidden="true">↗</span><span>Auto Poster <span style="color:var(--lime)">AI</span></span></a>
+<button class="nav-toggle" id="menu" type="button" aria-controls="links" aria-expanded="false" aria-label="Toggle menu">☰</button>
+<div class="nav-links" id="links">
+<a href="#features">Features</a><a href="#how">How it works</a><a href="#pricing">Pricing</a><a href="#questions">FAQ</a>
+<a class="btn outline" href="/login">Sign in</a>
+</div>
+</div></nav>
+<main>
+<section class="hero" id="top"><div class="wrap hero-grid">
+<div><div class="eyebrow">✦ Make more. Manage less.</div>
+<h1>Your content.<br><span>On autopilot.</span></h1>
+<p>A calmer way to manage your online presence. Plan your posts, control approved automations and see what's working — from one beautiful dashboard.</p>
+<div class="actions"><a class="btn" href="#pricing">See plans <span aria-hidden="true">→</span></a><a class="btn outline" href="#how">See how it works</a></div>
+<div class="tiny">Designed for creators, small businesses, publishers and community pages. Platform connections vary.</div>
+</div>
+<div class="canvas" aria-label="Illustration of the Auto Poster AI dashboard. Values are sample only.">
+<div class="app">
+<div class="appheader"><strong>✳ Auto Poster AI</strong><span class="mark">ILLUSTRATIVE</span></div>
+<h3>Your pages, your rules.</h3>
+<p class="sub">A single place to stay in control.</p>
+<div class="health"><div><b>Autopilot</b><br><span>Turn your approved schedules on or off.</span></div><div class="switch"></div></div>
+<div class="metrics"><div><strong>24</strong><small>Posts</small></div><div><strong>5.8k</strong><small>Views</small></div><div><strong>+12%</strong><small>Growth</small></div></div>
+<div class="previewposts"><b>Upcoming activity</b><div class="fakepost">🟢 <span>Scheduled update</span> <em>Ready</em></div><div class="fakepost">🟢 <span>Content calendar</span> <em>Active</em></div><div class="fakepost">🟡 <span>New social channel</span> <span style="flex:0">Connect first</span></div></div>
+</div></div>
+</div></section>
+<section class="section" id="features"><div class="wrap">
+<div class="center"><div class="eyebrow">Everything together</div><h2 class="section-title">Less busywork. More control.</h2><p class="lead">Keep the parts you enjoy about creating. Let the software handle repeatable publishing tasks when those platforms and sources support automation.</p></div>
+<div class="cards">
+<article class="card"><div class="card-icon">🗓️</div><h3>Schedule your content</h3><p>Write once and plan ahead. Put posts in a calendar rather than rushing at the last minute.</p></article>
+<article class="card"><div class="card-icon">⚡</div><h3>Custom Autopilot rules</h3><p>Choose which types of updates are allowed, how often to post, and when to pause.</p></article>
+<article class="card"><div class="card-icon">📊</div><h3>Actionable analytics</h3><p>See real post performance wherever the connected platform grants analytics access.</p></article>
+<article class="card"><div class="card-icon">🔐</div><h3>Secure connections</h3><p>No social passwords in our app. Supported integrations use official authorization flows.</p></article>
+<article class="card"><div class="card-icon">🧩</div><h3>Built for your niche</h3><p>Creators, restaurants, adoption centers, local media, shops and custom content workflows.</p></article>
+<article class="card"><div class="card-icon">🛟</div><h3>Know what happened</h3><p>Clear scheduled, published, paused and needs-attention statuses. No mystery posting.</p></article>
+</div></div></section>
+<section class="section alt" id="how"><div class="wrap">
+<div class="center"><div class="eyebrow">Simple by design</div><h2 class="section-title">Set it up. Make it yours.</h2></div>
+<div class="steps">
+<div class="step"><b>STEP 01</b><h3>Connect a supported channel</h3><p>Authorize an eligible Page or account using the social platform's own sign-in system.</p></div>
+<div class="step"><b>STEP 02</b><h3>Tell us what to publish</h3><p>Schedule your own content, or set up an approved source for repeatable updates.</p></div>
+<div class="step"><b>STEP 03</b><h3>Keep an eye on outcomes</h3><p>Change settings from your phone while server-side workers continue approved tasks.</p></div>
+</div>
+</div></section>
+<section class="section" id="pricing"><div class="wrap">
+<div class="center"><div class="eyebrow">Clear monthly plans</div><h2 class="section-title">Automation for every stage.</h2><p class="lead">Start small. Upgrade when you need more channels, workflows and capacity.</p></div>
+<div class="pricing">
+<article class="plan featured"><h3>Basic</h3><div class="who">For your first connected pages</div><div class="price">$10.99 <small>/ month</small></div><ul><li>Up to 2 social accounts</li><li>1 approved workflow</li><li>Up to 60 monthly published posts</li><li>Basic reporting</li></ul><a href="/login" class="btn">Open dashboard</a></article>
+<article class="plan"><h3>Creator</h3><div class="who">For consistent creators</div><div class="price">$29.99 <small>/ month</small></div><ul><li>Up to 5 accounts</li><li>3 workflows</li><li>Up to 250 monthly posts</li><li>Growth Coach insights</li></ul><a href="#questions" class="btn outline">Planned tier</a></article>
+<article class="plan"><h3>Business</h3><div class="who">For busy brands and teams</div><div class="price">$69.99 <small>/ month</small></div><ul><li>Up to 10 accounts</li><li>10 workflows</li><li>Up to 1,000 monthly posts</li><li>Team review and reporting</li></ul><a href="#questions" class="btn outline">Planned tier</a></article>
+<article class="plan"><h3>Agency</h3><div class="who">For managing multiple clients</div><div class="price">$149.99 <small>/ month</small></div><ul><li>Up to 25 accounts</li><li>Client workspaces</li><li>Up to 2,500 monthly posts</li><li>Client reports and approvals</li></ul><a href="#questions" class="btn outline">Planned tier</a></article>
+</div>
+<p class="price-note">Launch pricing is proposed. The private owner preview is not yet a public customer service. Supported posting destinations, quotas and billing will be confirmed before public checkout is enabled. All prices in USD, excluding applicable taxes.</p>
+</div></section>
+<section class="section alt"><div class="wrap"><div class="strip"><div><h2>Your business doesn't stop<br>when you close the app.</h2><p>Cloud-based scheduling is designed to keep authorized work moving even when your device is offline.</p></div><a class="btn" href="#questions">Learn about the launch</a></div></div></section>
+<section class="section" id="questions"><div class="wrap">
+<div class="center"><div class="eyebrow">Good questions</div><h2 class="section-title">Know exactly what to expect.</h2></div>
+<div class="faq">
+<details><summary>Do I have to give you my social media password?</summary><p>No. The customer version will use each supported platform's official connection screens. Platform approvals and eligible account types determine what can be published automatically.</p></details>
+<details><summary>Does it work on every platform right now?</summary><p>Not yet. Our existing owner-operated publisher supports Facebook Pages, and the mobile web starter can schedule Facebook Page text posts. Other platforms require separately approved publishing integrations.</p></details>
+<details><summary>Can it publish while my phone is off?</summary><p>Yes, when deployed on an always-on server with a valid authorization, a supported destination, and an active subscription. The hosted scheduler does the work, not your phone.</p></details>
+<details><summary>Can it monitor any website or niche automatically?</summary><p>Niche templates can support many types of content, but source collection must respect licenses, privacy and platform rules. A URL alone is not authorization to scrape, copy photographs, or publish personal information.</p></details>
+<details><summary>What happens if I stop paying?</summary><p>Premium publishing should pause on the server. You should still be able to manage billing and retrieve account information. Subscription cancellation itself must remain straightforward.</p></details>
+<details><summary>Can I download the iPhone app now?</summary><p>The browser-based owner preview is in development. A public iOS App Store release requires production hosting, an iOS application, subscription support and Apple approval.</p></details>
+</div></div></section>
+</main>
+<footer class="foot"><div class="wrap foot-inner"><div><div class="brand"><span class="logo" aria-hidden="true">↗</span><span>Auto Poster AI</span></div><small>Automate responsibly. Grow on your terms.</small><small>© <span id="year">2026</span> Auto Poster AI. All rights reserved.</small></div>
+<nav aria-label="Footer links"><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="/login">Owner preview</a></nav></div></footer>
+<script>
+document.getElementById("year").textContent=new Date().getFullYear();
+const toggle=document.getElementById("menu"),links=document.getElementById("links");
+toggle.addEventListener("click",()=>{const opened=links.classList.toggle("open");toggle.setAttribute("aria-expanded",String(opened));});
+links.querySelectorAll("a").forEach(a=>a.addEventListener("click",()=>{links.classList.remove("open");toggle.setAttribute("aria-expanded","false")}));
+</script>
+</body></html>
