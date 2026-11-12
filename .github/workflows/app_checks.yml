@@ -1,0 +1,35 @@
+name: Mobile control app checks
+
+on:
+  pull_request:
+    paths:
+      - "app_mvp.py"
+      - "app_control.py"
+      - "control_bridge.py"
+      - "app_mvp_wsgi.py"
+      - "requirements-app.txt"
+      - "tests/test_app_control.py"
+      - ".github/workflows/run.yml"
+      - ".github/workflows/app_checks.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  safety-and-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install app dependencies
+        run: pip install -r requirements-app.txt
+      - name: Compile mobile control code
+        run: python -m compileall -q app_mvp.py app_control.py control_bridge.py app_mvp_wsgi.py
+      - name: Test the subscription and autopilot gates
+        run: python -m unittest discover -s tests -p 'test_app_control.py' -v
+      - name: Run existing publishing regressions
+        run: python -m unittest discover -s tests -v
