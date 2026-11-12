@@ -1,0 +1,28 @@
+# Separate, opt-in starter app. Does NOT modify existing Render worker.
+# Select "New Blueprint" in Render; persistent disk requires a paid eligible service.
+services:
+  - type: web
+    name: auto-poster-ai-starter
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements-app.txt
+    startCommand: gunicorn --workers 1 --threads 2 --bind 0.0.0.0:$PORT app_mvp_wsgi:app
+    disk:
+      name: autopost-mvp-state
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: AUTOPOST_APP_PASSWORD
+        sync: false
+      - key: AUTOPOST_WEB_SECRET
+        generateValue: true
+      - key: AUTOPOST_WEB_DB
+        value: /var/data/autopost_web.db
+      - key: AUTOPOST_COOKIE_SECURE
+        value: "true"
+      - key: META_PAGE_ID
+        sync: false
+      - key: META_PAGE_ACCESS_TOKEN
+        sync: false
+      - key: META_GRAPH_VERSION
+        value: v26.0
