@@ -19,7 +19,9 @@ from zoneinfo import ZoneInfo
 from pathlib import Path
 
 from dotenv import load_dotenv
-from flask import Flask, abort, flash, redirect, render_template_string, request, session, url_for
+from flask import Flask, abort, flash, redirect, render_template_string, request, session, url_for, jsonify, Response
+
+import app_control
 
 load_dotenv()
 app = Flask(__name__)
@@ -69,6 +71,7 @@ def init_db():
             status TEXT NOT NULL DEFAULT 'needs_integration',
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
+    app_control.init()
 
 
 def require_login():
@@ -89,6 +92,8 @@ def valid_due(value):
 
 
 def publish_to_facebook(text):
+    if not app_control.allowed():
+        raise PermissionError("Subscription inactive: publishing is paused")
     # Reuse the existing official Graph API Page publisher.
     from core.facebook import FacebookClient
     return "meta:" + FacebookClient.from_env().publish_message(text)
@@ -125,7 +130,9 @@ def next_recurrence_due(last_due, frequency, zone_name, now):
 
 
 def run_due(now=None):
-    """Run due jobs. Only confirmed successes continue recurring series."""
+    """Run due jobs only while the server confirms an active entitlement."""
+    if not app_control.allowed():
+        return 0
     handled = 0
     now = now or datetime.now(timezone.utc)
     for _ in range(MAX_POSTS_PER_RUN):
@@ -134,6 +141,10 @@ def run_due(now=None):
             break
         handled += 1
         state, remote, error = "needs_review", None, None
+        if not app_control.allowed():
+            with db() as c:
+                c.execute("UPDATE app_posts SET status='scheduled' WHERE id=? AND status='sending'", (job["id"],))
+            break
         try:
             if job["platform"] == "facebook":
                 remote = publish_to_facebook(job["content"])
@@ -189,7 +200,7 @@ def worker():
 PAGE = """
 <!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Auto Poster AI · Post</title>
+<title>Auto Poster AI · Post</title><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Auto Poster AI"><link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#101319">
 <style>
 :root{color-scheme:dark;font:16px system-ui,-apple-system,sans-serif}
 *{box-sizing:border-box}
@@ -229,9 +240,10 @@ details>div{padding:0 12px 10px}
 .warning{color:#ffbdbd}
 @media(max-width:700px){.grid{grid-template-columns:1fr}header,main{padding:15px}.panel{padding:17px}h1{font-size:27px}}
 </style></head><body>
-<header><b>✳ Auto Poster AI</b><a href="/logout">Sign out</a></header>
+<header><b>✳ Auto Poster AI</b><div class="row"><a href="/control">⚙ Autopilot & Billing</a><a href="/logout">Sign out</a></div></header>
 <main>
 <p><span class="pill">Single-owner starter · Live connections shown below</span></p>
+{% if payment_required and not paid %}<p class="note">⏸ Your subscription is not active. Posting and scheduling are disabled until payment is confirmed. <a href="/control">Manage subscription</a>.</p>{% endif %}
 <h1>Make a post</h1>
 <p>Write your message, choose where it goes, then post now or schedule it.</p>
 <div class="grid">
@@ -454,7 +466,7 @@ def logout():
 
 @app.before_request
 def protect():
-    if request.endpoint in ("login", "static"):
+    if request.endpoint in ("login", "static", "stripe_webhook", "manifest", "app_icon"):
         return
     require_login()
     if request.method == "POST":
@@ -476,6 +488,7 @@ def home():
         PAGE, posts=rows, counts=counts, csrf=session["csrf"],
         fb_enabled=bool(os.getenv("META_PAGE_ID") and os.getenv("META_PAGE_ACCESS_TOKEN")),
         other_apps=("instagram", "tiktok", "youtube", "linkedin", "pinterest", "threads", "x"),
+        payment_required=app_control.require_payment(), paid=app_control.allowed(),
     )
 
 
@@ -505,6 +518,8 @@ def selected_destinations(form):
 
 @app.route("/schedule", methods=["POST"])
 def schedule():
+    if not app_control.allowed():
+        abort(402, "An active subscription is required to schedule or publish")
     content = request.form.get("content", "").strip()
     if not content or len(content) > 10000:
         abort(400, "Write a post before scheduling")
@@ -561,6 +576,190 @@ def cancel(post_id):
             c.execute("UPDATE app_posts SET status='cancelled' "
                       "WHERE id=? AND status='scheduled'", (post_id,))
     return redirect("/")
+
+
+
+CONTROL_PAGE = """
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101319"><link rel="manifest" href="/manifest.webmanifest">
+<title>Auto Poster AI · Control Center</title>
+<style>
+:root{color-scheme:dark;font:16px -apple-system,BlinkMacSystemFont,system-ui,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:#101319;color:#f3f7fa}
+main{max-width:700px;margin:auto;padding:20px 16px 80px}
+a{color:#bff88a}h1{letter-spacing:-.8px}h2{font-size:19px}
+p,small{color:#adbcc9;line-height:1.5}
+.card{background:#1e2835;padding:20px;border-radius:20px;border:1px solid #344455;margin:16px 0}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.row label{flex:1}.item{padding:12px 0;border-bottom:1px solid #3a4756}
+.item:last-child{border:0}.item small{display:block}
+input[type=checkbox]{height:23px;width:23px;accent-color:#c8f98a}
+input[type=number],select{width:100%;padding:14px;background:#111923;color:white;border:1px solid #536274;border-radius:10px;margin:7px 0 12px;font:inherit}
+button{font:inherit;background:#c8f98a;border:0;color:#1b2c18;padding:15px;border-radius:12px;font-weight:750;width:100%;cursor:pointer}
+button.secondary{background:#2f4050;color:white}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pill{font-size:12px;padding:6px 10px;border-radius:50px;background:#324458;color:#dbe9f7}
+.warn{background:#4c332e;color:#ffdfc3}
+@media(max-width:390px){.grid{grid-template-columns:1fr}}
+</style></head><body><main>
+<p><a href="/">← Back to composer</a></p>
+<h1>Autopilot controls</h1>
+<p>Change how your existing automated Facebook publishing workflow runs. These are live control settings once GitHub Actions is connected to this hosted app.</p>
+<section class="card">
+<div class="row"><h2>Subscription</h2><span class="pill {{' ' if paid else 'warn'}}">{{'Active' if paid else 'Inactive'}}</span></div>
+<p><b>Basic · $10.99/month</b></p>
+<p>{{billing.status.replace('_',' ')|title}}{% if billing.current_period_end %} · Paid access until {{expires}} UTC{% endif %}</p>
+{% if not paid %}
+<form method="post" action="/billing/checkout">
+<input name="_csrf" type="hidden" value="{{csrf}}">
+<button type="submit">Subscribe for $10.99 / month</button></form>
+{% else %}
+<form method="post" action="/billing/portal">
+<input name="_csrf" type="hidden" value="{{csrf}}">
+<button class="secondary" type="submit">Manage or cancel subscription</button></form>
+{% endif %}
+<small>Checkout requires Stripe configuration on the hosted server. iOS App Store billing will need StoreKit integration and Apple review.</small>
+</section>
+<section class="card">
+<h2>Publishing controls</h2>
+{% if not paid and payment_required %}<p>Settings can be saved, but the service will not publish while unpaid.</p>{% endif %}
+<form method="post" action="/control">
+<input type="hidden" name="_csrf" value="{{csrf}}">
+<div class="row item"><label for="enabled"><b>Autopilot</b><small>Pause or resume all scheduled publishing</small></label>
+<input id="enabled" name="enabled" type="checkbox" value="1" {{'checked' if settings.enabled}}></div>
+{% for name,label,sub in [
+('booking','Booking photos','Existing Allen County records'),
+('warrant','Wanted notices','Only verified sources'),
+('case','Case updates','Only verified case sources'),
+('status','Custody checks','Updates to already-published records')] %}
+<div class="row item"><label for="{{name}}_enabled"><b>{{label}}</b><small>{{sub}}</small></label>
+<input id="{{name}}_enabled" name="{{name}}_enabled" type="checkbox" value="1" {{'checked' if settings[name + '_enabled']}}></div>
+{% endfor %}
+<div class="row item"><label for="release_enabled"><b>Release announcements</b><small>Use only when the source and status are verified</small></label>
+<input id="release_enabled" name="release_enabled" type="checkbox" value="1" {{'checked' if settings.release_enabled}}></div>
+<div class="grid">
+<div><label for="booking_interval_minutes">Booking check every (minutes)</label><input id="booking_interval_minutes" name="booking_interval_minutes" type="number" min="15" max="10080" step="15" value="{{settings.booking_interval_minutes}}"></div>
+<div><label for="max_posts_per_run">Posts attempted per run</label><input id="max_posts_per_run" name="max_posts_per_run" type="number" min="1" max="10" value="{{settings.max_posts_per_run}}"></div>
+<div><label for="batch_size">Photos per booking batch (0=individual)</label><input id="batch_size" name="batch_size" type="number" min="0" max="10" value="{{settings.batch_size}}"></div>
+<div><label for="status_interval_minutes">Status check every (minutes)</label><input id="status_interval_minutes" name="status_interval_minutes" type="number" min="15" max="10080" step="15" value="{{settings.status_interval_minutes}}"></div>
+<div><label for="warrant_interval_minutes">Wanted check every (minutes)</label><input id="warrant_interval_minutes" name="warrant_interval_minutes" type="number" min="15" max="10080" step="15" value="{{settings.warrant_interval_minutes}}"></div>
+<div><label for="case_interval_minutes">Case check every (minutes)</label><input id="case_interval_minutes" name="case_interval_minutes" type="number" min="15" max="10080" step="15" value="{{settings.case_interval_minutes}}"></div>
+</div>
+<button type="submit">Save my settings</button>
+</form>
+</section>
+<section class="card"><h2>Connection status</h2>
+<p>Existing Facebook Page: <b>{{'Credential configured' if facebook_ready else 'Not connected'}}</b></p>
+<p>GitHub Actions control bridge: <b>{{'Server token configured' if bridge_ready else 'Not configured'}}</b></p>
+<small>A token configured on the server does not prove that the GitHub workflow has been connected. Until deployment and wiring are complete, changing these controls does not change the existing GitHub scheduled runs.</small>
+</section>
+</main></body></html>
+"""
+
+
+@app.route("/manifest.webmanifest")
+def manifest():
+    return jsonify({"name": "Auto Poster AI", "short_name": "Auto Poster",
+                    "start_url": "/", "display": "standalone",
+                    "background_color": "#101319", "theme_color": "#101319",
+                    "icons": [{"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml"}]})
+
+
+@app.route("/icon.svg")
+def app_icon():
+    return Response(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">'
+        '<rect width="128" height="128" rx="29" fill="#162333"/>'
+        '<path d="M26 94L57 22H71L103 94H83L73 69H52L43 94Z" fill="#bdf68c"/>'
+        '<path d="M26 77Q62 50 111 35L99 57Q64 64 26 77Z" fill="#68baff"/>'
+        '</svg>', mimetype="image/svg+xml"
+    )
+
+
+@app.route("/control", methods=["GET", "POST"])
+def control_center():
+    if request.method == "POST":
+        fields = {k: request.form.get(k, 0) for k in app_control.DEFAULTS}
+        try:
+            app_control.update_settings(fields)
+        except ValueError as exc:
+            abort(400, str(exc))
+        return redirect("/control")
+    billing = app_control.subscription_details()
+    expires = (datetime.fromtimestamp(billing["current_period_end"], timezone.utc).date()
+               if billing["current_period_end"] else None)
+    return render_template_string(
+        CONTROL_PAGE, csrf=session["csrf"], settings=app_control.get_settings(),
+        billing=billing, expires=expires,
+        paid=billing["active"], payment_required=app_control.require_payment(),
+        facebook_ready=bool(os.getenv("META_PAGE_ID") and os.getenv("META_PAGE_ACCESS_TOKEN")),
+        bridge_ready=bool(os.getenv("AUTOPOST_WORKER_TOKEN"))
+    )
+
+
+@app.route("/internal/legacy/claim", methods=["POST"])
+def legacy_claim():
+    required = os.getenv("AUTOPOST_WORKER_TOKEN", "")
+    supplied = request.headers.get("Authorization", "")
+    if len(required) < 32 or not hmac.compare_digest(supplied, "Bearer " + required):
+        abort(401)
+    data = request.get_json(silent=True) or {}
+    result = app_control.claim_run(str(data.get("mode", "")))
+    return jsonify(result)
+
+
+@app.route("/billing/checkout", methods=["POST"])
+def start_checkout():
+    price = os.getenv("STRIPE_BASIC_PRICE_ID")
+    key = os.getenv("STRIPE_SECRET_KEY")
+    origin = os.getenv("AUTOPOST_PUBLIC_URL", "").rstrip("/")
+    if not key or not price or not origin.startswith("https://"):
+        abort(503, "Configure Stripe and the HTTPS app URL to enable checkout")
+    import stripe
+    stripe.api_key = key
+    checkout = stripe.checkout.Session.create(
+        mode="subscription", line_items=[{"price": price, "quantity": 1}],
+        client_reference_id=app_control.WORKSPACE,
+        subscription_data={"metadata": {"workspace_id": app_control.WORKSPACE}},
+        success_url=origin + "/control", cancel_url=origin + "/control",
+    )
+    return redirect(checkout.url, code=303)
+
+
+@app.route("/billing/portal", methods=["POST"])
+def subscription_portal():
+    key = os.getenv("STRIPE_SECRET_KEY")
+    origin = os.getenv("AUTOPOST_PUBLIC_URL", "").rstrip("/")
+    with app_control.connect() as c:
+        row = c.execute(
+            "SELECT customer_id FROM subscriptions WHERE workspace_id=?",
+            (app_control.WORKSPACE,)
+        ).fetchone()
+    if not row or not row["customer_id"] or not key or not origin.startswith("https://"):
+        abort(503, "Billing portal is not configured")
+    import stripe
+    stripe.api_key = key
+    portal = stripe.billing_portal.Session.create(
+        customer=row["customer_id"], return_url=origin + "/control"
+    )
+    return redirect(portal.url, code=303)
+
+
+@app.route("/billing/webhook", methods=["POST"])
+def stripe_webhook():
+    secret = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+    if not secret:
+        abort(503, "Stripe webhook secret is missing")
+    import stripe
+    try:
+        event = stripe.Webhook.construct_event(
+            request.get_data(), request.headers.get("Stripe-Signature", ""), secret
+        )
+    except (ValueError, stripe.error.SignatureVerificationError):
+        abort(400)
+    app_control.record_subscription_event(dict(event))
+    return jsonify({"received": True})
 
 
 def start():
