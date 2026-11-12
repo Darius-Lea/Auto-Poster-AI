@@ -61,6 +61,14 @@ def init_db():
         if "frequency" not in columns:
             c.execute("ALTER TABLE app_posts ADD COLUMN frequency TEXT NOT NULL DEFAULT 'once'")
         c.execute("CREATE UNIQUE INDEX IF NOT EXISTS unique_series_due ON app_posts(series_id,due_at)")
+        c.execute("""CREATE TABLE IF NOT EXISTS website_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            url TEXT NOT NULL,
+            topic TEXT,
+            cadence TEXT NOT NULL CHECK(cadence IN ('new','daily')),
+            status TEXT NOT NULL DEFAULT 'needs_integration',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
 
 
 def require_login():
@@ -224,8 +232,8 @@ details>div{padding:0 12px 10px}
 <header><b>✳ Auto Poster AI</b><a href="/logout">Sign out</a></header>
 <main>
 <p><span class="pill">Single-owner starter · Live connections shown below</span></p>
-<h1>What do you want to post?</h1>
-<p>Write it once. Tap <strong>+ Add apps or websites</strong>. Choose how often.</p>
+<h1>Make a post</h1>
+<p>Write your message, choose where it goes, then post now or schedule it.</p>
 <div class="grid">
 <section class="panel">
 <form method="post" action="/schedule" id="composer">
@@ -234,7 +242,7 @@ details>div{padding:0 12px 10px}
 <textarea id="content" name="content" required maxlength="10000"
 placeholder="Write about your latest video, a sale, an adoption, a community update, or anything you want to share."></textarea>
 <details id="destinations">
-<summary>＋ Add apps or websites <span id="selected-count" class="pill">1 selected</span></summary>
+<summary>＋ Choose where to post <span id="selected-count" class="pill">1 selected</span></summary>
 <div>
 <label class="dest"><input type="checkbox" name="destinations" value="draft" checked>
 <span><b>Save a draft</b><small>No external publishing</small></span><span class="pill success">Ready</span></label>
@@ -246,15 +254,22 @@ placeholder="Write about your latest video, a sale, an adoption, a community upd
 <span><b>{{app|title}}</b><small>Save publishing request</small></span><span class="pill pending">Needs integration</span></label>
 {% endfor %}
 <div id="websites"></div>
-<button type="button" class="ghost" id="add-website">＋ Add a website URL</button>
+<button type="button" class="ghost" id="add-website">＋ Post to my website</button>
+<p><small>A website needs its own publishing connection. Adding a URL here saves a request; it doesn't publish.</small></p>
 </div>
 </details>
-<label for="frequency">How often?</label>
+<details>
+<summary>Advanced: repeat this exact post (optional)</summary>
+<div>
+<label for="frequency">Repeat this identical message?</label>
 <select name="frequency" id="frequency">
-<option value="once">Only once</option>
-<option value="daily">Every day — repeat this same post</option>
-<option value="weekly">Every week — repeat this same post</option>
+<option value="once">No, post only once</option>
+<option value="daily">Yes, every day (same text)</option>
+<option value="weekly">Yes, every week (same text)</option>
 </select>
+<p><small>This repeats the <b>same message</b>. For new updates from a site, use Website Autopilot below instead.</small></p>
+</div>
+</details>
 <label for="when">When should the first one go?</label>
 <select name="when" id="when"><option value="now">As soon as possible</option>
 <option value="later">Choose date & time</option></select>
@@ -263,7 +278,7 @@ placeholder="Write about your latest video, a sale, an adoption, a community upd
 </div>
 <input type="hidden" id="utc_due" name="utc_due">
 <input type="hidden" id="time_zone" name="time_zone" value="UTC">
-<p class="note">Facebook posts only if your existing Page connection is configured. Other social apps and websites will be saved as <b>Needs connection</b>, never marked published. Repeating a post republishes the same text; source monitoring is a separate upcoming feature.</p>
+<p class="note">Your connected Facebook Page is the only real social destination in this starter. Other selections are saved as <b>Needs connection</b>—nothing will be published there. You're always able to review and cancel pending posts.</p>
 <button type="submit" style="width:100%;margin-top:15px">Post or schedule</button>
 </form>
 </section>
@@ -274,18 +289,18 @@ placeholder="Write about your latest video, a sale, an adoption, a community upd
 <p><b>{{counts.get('needs_connection',0)}}</b> awaiting connection ·
 <b>{{counts.get('needs_review',0)}}</b> needing review</p>
 <div class="note">The scheduler runs while the hosted service stays on. This starter still needs deployment before you can use it from any device.</div></div>
-<div class="panel"><h2>What happens next?</h2>
-<p>1. Select your apps or website.</p>
-<p>2. Pick a frequency.</p>
-<p>3. Keep track here—no developer dashboard needed for everyday posting.</p>
-<small>Real additional platforms require approved connectors and account authorization.</small>
+<div class="panel"><h2>Want posts from a website?</h2>
+<p>For example, find new adoption listings, your own blog updates, or permitted community feeds.</p>
+<p><b>Watch a website</b> is different from publishing <b>to</b> a website.</p>
+<a href="/website">＋ Set up Website Autopilot</a>
+<p><small>Setup request only until the website connector is available.</small></p>
 </div>
 </aside>
 </div>
 <section class="panel"><h2>Your posts</h2>
 {% for p in posts %}
 <div class="post">
-<div class="status"><b>{{p.platform|title}}</b><span class="pill {{'success' if p.status=='published' else 'pending' if p.status=='needs_connection' else ''}}">{{p.status.replace('_',' ')|title}}</span><small>{{p.frequency}}</small></div>
+<div class="status"><b>{{'Post to website' if p.platform == 'website' else p.platform|title}}</b><span class="pill {{'success' if p.status=='published' else 'pending' if p.status=='needs_connection' else ''}}">{{p.status.replace('_',' ')|title}}</span><small>{{p.frequency}}</small></div>
 {% if p.website_url %}<small>{{p.website_url}}</small>{% endif %}
 <p>{{p.content}}</p>
 <small>{{p.due_at}}</small>
@@ -309,7 +324,7 @@ document.getElementById('add-website').addEventListener('click',()=>{
 if(websites.children.length>=5){alert('You can add up to five websites at once.');return}
 const row=document.createElement('div');row.className='website';
 const input=document.createElement('input');input.name='websites';input.type='url';
-input.placeholder='https://your-website.com';input.required=true;input.setAttribute('aria-label','Website URL');
+input.placeholder='https://your-wordpress-or-blog.com';input.required=true;input.setAttribute('aria-label','Website to publish to');
 const remove=document.createElement('button');remove.type='button';remove.className='ghost';remove.textContent='Remove';
 remove.addEventListener('click',()=>{row.remove();updateCount()});
 row.append(input,remove);websites.append(row);updateCount();
@@ -321,7 +336,7 @@ document.getElementById('selected-count').textContent=n+' selected';
 form.querySelectorAll('input[name="destinations"]').forEach(el=>el.addEventListener('change',updateCount));
 form.addEventListener('submit',e=>{
 if(!form.querySelector('input[name="destinations"]:checked') && !websites.children.length){
-e.preventDefault();alert('Tap + to choose an app or website.');return;
+e.preventDefault();alert('Choose where this post should go.');return;
 }
 if(when.value==='later'){
 const d=new Date(date.value);
@@ -343,6 +358,77 @@ p{color:#b1b9c9}</style><h1>✦ Auto Poster AI</h1><p>Sign in to your private st
 <form method="post" action="/login"><input name="password" type="password"
 autocomplete="current-password" placeholder="App password" required>
 <button>Sign in</button></form></html>"""
+
+
+WEBSITE_PAGE = """
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Auto Poster AI · Website Autopilot</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,sans-serif}
+*{box-sizing:border-box}body{background:#101319;color:#f1f3f8;max-width:620px;margin:auto;padding:22px}
+h1{font-size:27px}p,small{color:#b9c3d1;line-height:1.55}
+section{background:#1d2530;border:1px solid #3c4655;border-radius:16px;padding:20px;margin:18px 0}
+label{display:block;font-weight:650;font-size:14px;margin:14px 0 7px}
+input,select,button{font:inherit;border-radius:9px;padding:12px}
+input,select{display:block;width:100%;background:#101722;color:white;border:1px solid #4c5769}
+button{background:#c7f78b;border:0;font-weight:750;color:#172217;cursor:pointer}
+a{color:#c7f78b}.tag{display:inline-block;padding:4px 9px;border-radius:40px;background:#46505f;font-size:12px}
+.item{padding:13px 0;border-top:1px solid #42505e;overflow-wrap:anywhere}
+</style></head><body><p><a href="/">← Back to Post</a></p>
+<h1>Watch a website</h1>
+<p>Tell Auto Poster AI what source you want to monitor. This is for <b>new content</b>, not repeating the same message.</p>
+<section>
+<h2>New website source</h2>
+<form method="post" action="/website">
+<input type="hidden" name="_csrf" value="{{csrf}}">
+<label for="url">Website or feed URL</label>
+<input id="url" name="url" type="url" required placeholder="https://example.org/adoptions">
+<label for="topic">What are you interested in?</label>
+<input id="topic" name="topic" maxlength="120" placeholder="New animal adoption listings, blog posts…">
+<label for="cadence">When should new items be considered?</label>
+<select id="cadence" name="cadence">
+<option value="new">Whenever something new appears</option>
+<option value="daily">Once-daily roundup</option>
+</select>
+<p><small>Only use sources you have permission to reuse. New-source verification,
+duplicate checks, and connection approval will be required before publishing.</small></p>
+<button type="submit">Save website request</button></form></section>
+<section><h2>Website requests</h2>
+{% for r in requests %}
+<div class="item"><b>{{r.url}}</b><p>{{r.topic or 'All approved updates'}} · {{'Whenever new content appears' if r.cadence=='new' else 'Daily summary'}}</p>
+<span class="tag">Not connected — no monitoring yet</span></div>
+{% else %}<p>You haven't added a source yet.</p>{% endfor %}
+</section></body></html>"""
+
+
+def validate_website_url(url):
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or len(url) > 2048:
+        raise ValueError("Use a complete HTTPS website address without credentials")
+    if parsed.hostname.lower() in ("localhost",) or parsed.hostname.endswith((".local", ".internal")):
+        raise ValueError("Use a public website address")
+    return url
+
+
+@app.route("/website", methods=["GET", "POST"])
+def website_requests():
+    if request.method == "POST":
+        url = request.form.get("url", "").strip()
+        topic = request.form.get("topic", "").strip()
+        cadence = request.form.get("cadence", "new")
+        try:
+            validate_website_url(url)
+        except ValueError as exc:
+            abort(400, str(exc))
+        if len(topic) > 120 or cadence not in ("new", "daily"):
+            abort(400, "Invalid website monitoring settings")
+        with db() as c:
+            c.execute("INSERT INTO website_requests(url,topic,cadence) VALUES(?,?,?)", (url, topic, cadence))
+        return redirect("/website")
+    with db() as c:
+        rows = c.execute("SELECT * FROM website_requests ORDER BY id DESC LIMIT 50").fetchall()
+    return render_template_string(WEBSITE_PAGE, requests=rows, csrf=session["csrf"])
 
 
 @app.route("/login", methods=["GET", "POST"])
