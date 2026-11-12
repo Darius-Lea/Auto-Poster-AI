@@ -53,6 +53,8 @@ class PreviewSafetyTests(unittest.TestCase):
             self.assertIn(b"Review post", response.data)
             self.assertNotIn(b'name="destinations" value="draft" checked', response.data)
             self.assertIn(b"Coming later", response.data)
+            self.assertIn(b"Set up an automation for free", response.data)
+            self.assertNotIn(b"\xf0\x9f\xa7\xaa", response.data)
 
     def test_draft_scheduling_allowed(self):
         with self.web.app.test_client() as c:
@@ -66,16 +68,18 @@ class PreviewSafetyTests(unittest.TestCase):
             row=connection.execute("SELECT platform,status FROM app_posts").fetchone()
         self.assertEqual((row["platform"],row["status"]),("draft","scheduled"))
 
-    def test_social_posting_rejected_even_when_connection_claimed(self):
+    def test_social_post_saved_without_publishing_in_preview(self):
         with self.web.app.test_client() as c:
             csrf=self._login(c)
             r=c.post("/schedule",data={
                 "_csrf":csrf,"content":"No external post",
                 "destinations":"facebook","when":"now","time_zone":"UTC"
             })
-            self.assertEqual(r.status_code,403)
+            self.assertEqual(r.status_code,302)
         with self.web.db() as connection:
-            self.assertEqual(connection.execute("SELECT COUNT(*) FROM app_posts").fetchone()[0],0)
+            rows=connection.execute("SELECT platform,status FROM app_posts").fetchall()
+        self.assertEqual([(x["platform"],x["status"]) for x in rows],
+                         [("facebook","setup_only")])
 
     def test_legacy_queue_external_post_held_not_sent(self):
         with self.web.db() as connection:
@@ -98,7 +102,25 @@ class PreviewSafetyTests(unittest.TestCase):
             self.assertEqual(c.post("/billing/checkout",data={"_csrf":csrf}).status_code,403)
             self.assertEqual(c.post("/website",data={
                 "_csrf":csrf,"url":"https://example.com/rss","cadence":"daily"
-            }).status_code,403)
+            }).status_code,302)
+        with self.web.db() as connection:
+            status=connection.execute("SELECT status FROM website_requests").fetchone()[0]
+        self.assertEqual(status,"needs_integration")
+
+    def test_unpaid_save_automation_preference_on_preview(self):
+        with self.web.app.test_client() as c:
+            csrf=self._login(c)
+            response=c.post("/automations",data={
+                "_csrf":csrf,"name":"Daily shop updates",
+                "topic":"Friendly product announcements",
+                "kind":"manual","destination":"facebook_later",
+                "cadence":"daily","review_mode":"approve_first",
+            })
+            self.assertEqual(response.status_code,302)
+            page=c.get("/automations")
+            self.assertEqual(page.status_code,200)
+            self.assertIn(b"Daily shop updates",page.data)
+            self.assertIn(b"Setup only",page.data)
 
     def test_social_login_disabled_on_free_preview(self):
         with self.web.app.test_client() as c:
