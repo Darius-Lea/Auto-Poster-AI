@@ -413,10 +413,14 @@ a{color:#c7f78b}.tag{display:inline-block;padding:4px 9px;border-radius:40px;bac
 .item{padding:13px 0;border-top:1px solid #42505e;overflow-wrap:anywhere}
 </style></head><body><p><a href="/">← Back to Post</a></p>
 <h1>Watch a website</h1>
-<p>Tell Auto Poster AI what source you want to monitor. This is for <b>new content</b>, not repeating the same message.</p>
+{% if preview_mode %}
+<p style="padding:13px;border:1px solid #856b3e;border-radius:12px;background:#393429"><b>Coming soon in this free preview.</b> Website monitoring does not run here. The form below is disabled so you don't mistake a saved request for an active automation.</p>
+{% else %}
+<p>Tell Auto Poster AI what source you want to monitor. This is for <b>new content</b>, not repeating the same message.</p>{% endif %}
 <section>
 <h2>New website source</h2>
 <form method="post" action="/website">
+<fieldset {% if preview_mode %}disabled{% endif %} style="border:0;padding:0;margin:0">
 <input type="hidden" name="_csrf" value="{{csrf}}">
 <label for="url">Website or feed URL</label>
 <input id="url" name="url" type="url" required placeholder="https://example.org/adoptions">
@@ -429,7 +433,7 @@ a{color:#c7f78b}.tag{display:inline-block;padding:4px 9px;border-radius:40px;bac
 </select>
 <p><small>Only use sources you have permission to reuse. New-source verification,
 duplicate checks, and connection approval will be required before publishing.</small></p>
-<button type="submit">Save website request</button></form></section>
+<button type="submit">{{'Not available in free preview' if preview_mode else 'Save website request'}}</button></fieldset></form></section>
 <section><h2>Website requests</h2>
 {% for r in requests %}
 <div class="item"><b>{{r.url}}</b><p>{{r.topic or 'All approved updates'}} · {{'Whenever new content appears' if r.cadence=='new' else 'Daily summary'}}</p>
@@ -466,7 +470,8 @@ def website_requests():
         return redirect("/website")
     with db() as c:
         rows = c.execute("SELECT * FROM website_requests ORDER BY id DESC LIMIT 50").fetchall()
-    return render_template_string(WEBSITE_PAGE, requests=rows, csrf=session["csrf"])
+    return render_template_string(WEBSITE_PAGE, requests=rows, csrf=session["csrf"],
+                                  preview_mode=preview_mode())
 
 
 @app.route("/welcome")
@@ -802,6 +807,8 @@ button.secondary{background:#2f4050;color:white}
 </section>
 <section class="card">
 <h2>Publishing controls</h2>
+{% if preview_mode %}<p>These specialized rules are shown for development testing only. They are not linked to your existing Facebook Page.</p>{% endif %}
+<details><summary>Show advanced source controls</summary>
 {% if not paid and payment_required %}<p>Settings can be saved, but the service will not publish while unpaid.</p>{% endif %}
 <form method="post" action="/control">
 <input type="hidden" name="_csrf" value="{{csrf}}">
@@ -826,7 +833,7 @@ button.secondary{background:#2f4050;color:white}
 <div><label for="case_interval_minutes">Case check every (minutes)</label><input id="case_interval_minutes" name="case_interval_minutes" type="number" min="15" max="10080" step="15" value="{{settings.case_interval_minutes}}"></div>
 </div>
 <button type="submit">Save my settings</button>
-</form>
+</form></details>
 </section>
 <section class="card"><h2>Connection status</h2>
 <p>Existing Facebook Page: <b>{{'Credential configured' if facebook_ready else 'Not connected'}}</b></p>
