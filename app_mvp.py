@@ -466,7 +466,7 @@ def logout():
 
 @app.before_request
 def protect():
-    if request.endpoint in ("login", "static", "stripe_webhook", "manifest", "app_icon"):
+    if request.endpoint in ("login", "static", "stripe_webhook", "manifest", "app_icon", "legacy_claim"):
         return
     require_login()
     if request.method == "POST":
