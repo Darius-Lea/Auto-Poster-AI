@@ -14,7 +14,7 @@ a{color:var(--green);text-decoration:none}a:hover{text-decoration:underline}butt
 .shell{max-width:1210px;margin:0 auto;display:grid;grid-template-columns:220px minmax(0,1fr);min-height:100vh}
 .side{padding:30px 17px;border-right:1px solid var(--outline);position:sticky;top:0;max-height:100vh}
 .logo{font-weight:900;font-size:20px;letter-spacing:-.6px;margin-bottom:38px}.logo span{color:var(--green)}.logo .symbol{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:11px;background:#33495d;margin-right:8px;color:var(--green)}
-.navlinks{display:grid;gap:8px}.navlinks a,.navlinks span{color:#c4d1e0;padding:12px 14px;border-radius:11px;font-weight:650;font-size:14px}.navlinks a.active{background:#c8f68a20;color:var(--green)}.navlinks span.disabled{color:#8196a9}.navlinks a:hover{background:#22344a;text-decoration:none}.side-footer{position:absolute;bottom:32px;left:22px;font-size:12px;color:#8ea4b5;max-width:175px}
+.navlinks{display:grid;gap:8px}.navlinks a,.navlinks span{color:#c4d1e0;padding:12px 14px;border-radius:11px;font-weight:650;font-size:14px}.navlinks a.active{background:#c8f68a20;color:var(--green)}.navlinks span.disabled{color:#8196a9}.navlinks a:hover{background:#22344a;text-decoration:none}.navlinks a{display:flex;align-items:center;gap:11px}.side-footer{position:absolute;bottom:32px;left:22px;font-size:12px;color:#8ea4b5;max-width:175px}
 .main{padding:32px clamp(17px,3.1vw,40px) 100px;min-width:0}.topline{display:flex;justify-content:space-between;align-items:start;gap:14px}.eyebrow{font-size:12px;color:var(--green);text-transform:uppercase;letter-spacing:1.5px;font-weight:850}
 h1{letter-spacing:-1.5px;font-size:clamp(31px,3vw,42px);line-height:1.13;margin:10px 0 8px}h2{font-size:19px;margin:0 0 12px;letter-spacing:-.4px}p{color:var(--muted);margin:7px 0 14px;font-size:14px;line-height:1.65}
 .badge{display:inline-flex;align-items:center;gap:6px;border-radius:30px;padding:6px 10px;background:#2b3d50;color:#d5e2ee;font-size:11px;font-weight:750;white-space:nowrap}
@@ -38,21 +38,23 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
 .modal[hidden]{display:none}.modal{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:17px;background:#010714ce}.modal-panel{width:min(100%,520px);background:#142239;border:1px solid #5e7691;border-radius:19px;padding:25px;box-shadow:0 24px 90px #0009}.modal-panel h2{font-size:24px;margin:3px 0 10px}.modal-panel .actions{margin-top:20px}.modal-panel .actions>*{flex:1}
 .mobile-nav{display:none}
 @media(max-width:950px){.shell{grid-template-columns:1fr}.side{position:static;display:flex;align-items:center;justify-content:space-between;max-height:none;border-right:0;border-bottom:1px solid var(--outline);padding:16px 22px}.side .logo{margin:0}.navlinks,.side-footer{display:none}.main{padding-top:25px}}
-@media(max-width:700px){.content-grid{grid-template-columns:1fr}.metrics{gap:7px}.metric{padding:14px 9px}.metric strong{font-size:23px}.metric small{font-size:10px}.card{padding:17px}.banner{display:block;margin-top:20px}.banner .badge{margin-top:10px}.main{padding-left:15px;padding-right:15px}.side{padding:13px 17px}.mobile-nav{display:grid;position:fixed;bottom:0;left:0;right:0;grid-template-columns:repeat(4,1fr);z-index:25;background:#0e1928ed;border-top:1px solid #3c4d5b;padding:9px 4px max(10px,env(safe-area-inset-bottom));backdrop-filter:blur(15px)}.mobile-nav a{font-size:11px;color:#c7d6e3;text-align:center;display:grid;gap:2px}.mobile-nav a span{font-size:19px}.mobile-nav a:hover{text-decoration:none;color:var(--green)}.main{padding-bottom:110px}}
+@media(max-width:700px){.content-grid{grid-template-columns:1fr}.metrics{gap:7px}.metric{padding:14px 9px}.metric strong{font-size:23px}.metric small{font-size:10px}.card{padding:17px}.banner{display:block;margin-top:20px}.banner .badge{margin-top:10px}.main{padding-left:15px;padding-right:15px}.side{padding:13px 17px}.mobile-nav{display:grid;position:fixed;bottom:0;left:0;right:0;grid-template-columns:repeat(5,1fr);z-index:25;background:#0e1928ed;border-top:1px solid #3c4d5b;padding:9px 4px max(10px,env(safe-area-inset-bottom));backdrop-filter:blur(15px)}.mobile-nav a{font-size:11px;color:#c7d6e3;text-align:center;display:grid;gap:2px}.mobile-nav a .icon{width:21px;height:21px;margin:auto}.mobile-nav a:hover{text-decoration:none;color:var(--green)}.main{padding-bottom:110px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 </style>
 </head>
 <body>
+{% include "_icons.html" %}
 <div class="shell">
 <aside class="side">
- <div class="logo"><span class="symbol">↗</span>Auto Poster <span>AI</span></div>
+ <div class="logo"><span class="symbol"><svg class="icon" aria-hidden="true"><use href="#ico-arrow-up-right"/></svg></span>Auto Poster <span>AI</span></div>
  <nav class="navlinks" aria-label="Dashboard navigation">
-  <a href="#overview" class="active">⌂ &nbsp; Home</a>
-  <a href="#create">✎ &nbsp; Create a post</a>
-  <a href="#posts">▦ &nbsp; Your posts</a>
-  <a href="/pages">◉ &nbsp; Facebook Pages</a>
-  <a href="/control">⚙ &nbsp; Autopilot & settings</a>
-  <span class="disabled">◫ &nbsp; Insights (upcoming)</span>
+  <a href="#overview" class="active"><svg class="icon" aria-hidden="true"><use href="#ico-grid"/></svg> Home</a>
+  <a href="#create"><svg class="icon" aria-hidden="true"><use href="#ico-pencil"/></svg> Create a post</a>
+  <a href="#posts"><svg class="icon" aria-hidden="true"><use href="#ico-calendar"/></svg> Your posts</a>
+  <a href="/pages"><svg class="icon" aria-hidden="true"><use href="#ico-plug"/></svg> Facebook Pages</a>
+  <a href="/automations"><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg> Build automations</a>
+  <a href="/control"><svg class="icon" aria-hidden="true"><use href="#ico-settings"/></svg> Settings</a>
+  <span class="disabled"><svg class="icon" aria-hidden="true"><use href="#ico-chart"/></svg> Insights (upcoming)</span>
  </nav>
  <div class="side-footer">PRIVATE BETA<br>This is an owner-only preview, not a customer subscription platform.<p><a href="/logout">Sign out</a></p></div>
 </aside>
@@ -63,9 +65,9 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
    <a class="button-secondary" href="/logout">Sign out</a>
   </div>
   {% if preview_mode %}
-  <div class="banner" role="status"><div><b>🧪 Free beta: safe preview mode</b><p>You can test drafts and the dashboard. Real social publishing, paid subscriptions and website monitoring are disabled here. Drafts may disappear when the free server restarts.</p></div><span class="badge">TEST MODE</span></div>
+  <div class="banner" role="status"><div><b><svg class="icon" aria-hidden="true"><use href="#ico-shield"/></svg> Free beta: safe preview mode</b><p>Build automation plans, posting schedules and drafts without paying. This free preview cannot publish externally and may lose saved setups after a restart.</p></div><span class="badge">TEST MODE</span></div>
   {% elif payment_required and not paid %}
-  <div class="banner" role="status"><div><b>Publishing paused: subscription inactive</b><p>You can review your account, but scheduled publishing requires active paid access.</p></div><a class="button-secondary" href="/control">Manage billing</a></div>
+  <div class="banner" role="status"><div><b><svg class="icon" aria-hidden="true"><use href="#ico-lock"/></svg> Setup is free. Publishing is paused.</b><p>Build your content plan now. Subscribe only when you're ready to activate supported publishing.</p></div><a class="button-secondary" href="/control">Manage billing</a></div>
   {% endif %}
   <div class="metrics">
    <div class="metric"><strong>{{counts.get('scheduled',0)}}</strong><small>Scheduled</small></div>
