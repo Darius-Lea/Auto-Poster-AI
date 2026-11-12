@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 from pathlib import Path
 
 from dotenv import load_dotenv
-from flask import Flask, abort, flash, redirect, render_template_string, request, session, url_for, jsonify, Response
+from flask import Flask, abort, flash, redirect, render_template_string, request, session, url_for, jsonify, Response, send_from_directory
 
 import app_control
 
@@ -443,6 +443,12 @@ def website_requests():
     return render_template_string(WEBSITE_PAGE, requests=rows, csrf=session["csrf"])
 
 
+@app.route("/welcome")
+def public_website():
+    """Public marketing site; the paid owner dashboard stays separate."""
+    return send_from_directory("website", "index.html")
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if not PASSWORD:
@@ -466,8 +472,12 @@ def logout():
 
 @app.before_request
 def protect():
-    if request.endpoint in ("login", "static", "stripe_webhook", "manifest", "app_icon", "legacy_claim"):
+    if request.endpoint in ("login", "static", "stripe_webhook", "manifest", "app_icon", "legacy_claim", "public_website"):
         return
+    if (request.endpoint == "home" and request.method == "GET"
+            and os.getenv("AUTOPOST_PUBLIC_LANDING", "false").lower() == "true"
+            and session.get("authorized") is not True):
+        return redirect("/welcome")
     require_login()
     if request.method == "POST":
         # Browser form requests must include a session CSRF token.
