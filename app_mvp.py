@@ -307,7 +307,7 @@ placeholder="Write about your latest video, a sale, an adoption, a community upd
 </div>
 <input type="hidden" id="utc_due" name="utc_due">
 <input type="hidden" id="time_zone" name="time_zone" value="UTC">
-<p class="note">Your connected Facebook Page is the only real social destination in this starter. Other selections are saved as <b>Needs connection</b>—nothing will be published there. You're always able to review and cancel pending posts.</p>
+<p class="note">Only explicitly selected and authorized Facebook business Pages can receive live posts. Other social apps remain <b>Needs connection</b> and are not published. Review every chosen Page before scheduling.</p>
 <button type="submit" style="width:100%;margin-top:15px">Post or schedule</button>
 </form>
 </section>
