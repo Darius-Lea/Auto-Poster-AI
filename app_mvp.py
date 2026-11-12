@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 from pathlib import Path
 
 from dotenv import load_dotenv
-from flask import Flask, abort, flash, redirect, render_template_string, request, session, url_for, jsonify, Response, send_from_directory
+from flask import Flask, abort, flash, redirect, render_template, render_template_string, request, session, url_for, jsonify, Response, send_from_directory
 
 import app_control
 import meta_accounts
@@ -31,6 +31,10 @@ DATABASE = os.getenv("AUTOPOST_WEB_DB", "autopost_web.db")
 PASSWORD = os.getenv("AUTOPOST_APP_PASSWORD")
 LOCK = threading.RLock()
 MAX_POSTS_PER_RUN = 10
+
+
+def preview_mode() -> bool:
+    return os.getenv('AUTOPOST_PREVIEW_MODE', 'false').lower() == 'true'
 
 
 def db():
@@ -153,7 +157,9 @@ def run_due(now=None):
                 c.execute("UPDATE app_posts SET status='scheduled' WHERE id=? AND status='sending'", (job["id"],))
             break
         try:
-            if job["platform"] == "facebook":
+            if preview_mode() and job["platform"] != "draft":
+                state = "needs_connection"
+            elif job["platform"] == "facebook":
                 remote = publish_to_facebook(job["content"])
                 state = "published"
             elif job["platform"] == "facebook_page":
@@ -444,6 +450,8 @@ def validate_website_url(url):
 @app.route("/website", methods=["GET", "POST"])
 def website_requests():
     if request.method == "POST":
+        if preview_mode():
+            abort(403, "Website monitoring is not available in this free preview")
         url = request.form.get("url", "").strip()
         topic = request.form.get("topic", "").strip()
         cadence = request.form.get("cadence", "new")
@@ -513,12 +521,13 @@ def home():
             "SELECT status,COUNT(*) n FROM app_posts GROUP BY status"
         )}
     pages = meta_accounts.list_pages(meta_accounts.WORKSPACE)
-    return render_template_string(
-        PAGE, posts=rows, counts=counts, csrf=session["csrf"],
+    return render_template(
+        "dashboard.html", posts=rows, counts=counts, csrf=session["csrf"],
         fb_pages=pages, page_names={p["page_id"]: p["name"] for p in pages},
         fb_enabled=bool(os.getenv("META_PAGE_ID") and os.getenv("META_PAGE_ACCESS_TOKEN")),
         other_apps=("instagram", "tiktok", "youtube", "linkedin", "pinterest", "threads", "x"),
         payment_required=app_control.require_payment(), paid=app_control.allowed(),
+        preview_mode=preview_mode(), settings=app_control.get_settings(),
     )
 
 
@@ -563,6 +572,8 @@ def schedule():
         targets = selected_destinations(request.form)
     except ValueError as exc:
         abort(400, str(exc))
+    if preview_mode() and any(platform != "draft" for platform, _, _ in targets):
+        abort(403, "Only drafts are available in free preview mode")
     frequency = request.form.get("frequency", "once")
     if frequency not in ("once", "daily", "weekly"):
         abort(400, "Invalid posting frequency")
@@ -674,7 +685,7 @@ input[type=checkbox]{width:21px;height:21px;accent-color:#c8f98a}
 @app.route("/pages")
 def pages_overview():
     return render_template_string(
-        PAGES_PAGE, csrf=session["csrf"], configured=meta_accounts.configured(),
+        PAGES_PAGE, csrf=session["csrf"], configured=(meta_accounts.configured() and not preview_mode()),
         pending=meta_accounts.pending_choices(meta_accounts.WORKSPACE),
         pages=meta_accounts.list_pages(meta_accounts.WORKSPACE),
     )
@@ -682,6 +693,8 @@ def pages_overview():
 
 @app.route("/facebook/connect")
 def facebook_connect():
+    if preview_mode():
+        abort(403, "Facebook authorization is unavailable in free preview mode")
     if not meta_accounts.configured():
         abort(503, "Facebook business login is not configured on this server")
     state = secrets.token_urlsafe(40)
@@ -766,10 +779,15 @@ button.secondary{background:#2f4050;color:white}
 </style></head><body><main>
 <p><a href="/">← Back to composer</a></p>
 <h1>Autopilot controls</h1>
-<p>Change how your existing automated Facebook publishing workflow runs. These are live control settings once GitHub Actions is connected to this hosted app.</p>
+{% if preview_mode %}
+<p class="warn" style="padding:12px;border-radius:10px">Free test site: these settings are for exploring only. They do not control your live Facebook publisher.</p>
+{% else %}
+<p>Change how your existing automated Facebook publishing workflow runs. These are live control settings once GitHub Actions is connected to this hosted app.</p>{% endif %}
 <section class="card">
 <div class="row"><h2>Subscription</h2><span class="pill {{' ' if paid else 'warn'}}">{{'Active' if paid else 'Inactive'}}</span></div>
-<p><b>Basic · $10.99/month</b></p>
+{% if preview_mode %}<p><b>Free beta preview</b> · No billing or checkout here.</p>
+<p>The commercial subscription service is not connected yet. A payment cannot be made from this test site.</p>
+{% else %}<p><b>Basic · $10.99/month</b></p>
 <p>{{billing.status.replace('_',' ')|title}}{% if billing.current_period_end %} · Paid access until {{expires}} UTC{% endif %}</p>
 {% if not paid %}
 <form method="post" action="/billing/checkout">
@@ -780,7 +798,7 @@ button.secondary{background:#2f4050;color:white}
 <input name="_csrf" type="hidden" value="{{csrf}}">
 <button class="secondary" type="submit">Manage or cancel subscription</button></form>
 {% endif %}
-<small>Checkout requires Stripe configuration on the hosted server. iOS App Store billing will need StoreKit integration and Apple review.</small>
+<small>Checkout requires Stripe configuration on the hosted server. iOS App Store billing will need StoreKit integration and Apple review.</small>{% endif %}
 </section>
 <section class="card">
 <h2>Publishing controls</h2>
@@ -855,7 +873,8 @@ def control_center():
         billing=billing, expires=expires,
         paid=billing["active"], payment_required=app_control.require_payment(),
         facebook_ready=bool(os.getenv("META_PAGE_ID") and os.getenv("META_PAGE_ACCESS_TOKEN")),
-        bridge_ready=bool(os.getenv("AUTOPOST_WORKER_TOKEN"))
+        bridge_ready=bool(os.getenv("AUTOPOST_WORKER_TOKEN")),
+        preview_mode=preview_mode(),
     )
 
 
@@ -872,6 +891,8 @@ def legacy_claim():
 
 @app.route("/billing/checkout", methods=["POST"])
 def start_checkout():
+    if preview_mode():
+        abort(403, "Checkout is disabled in free preview mode")
     price = os.getenv("STRIPE_BASIC_PRICE_ID")
     key = os.getenv("STRIPE_SECRET_KEY")
     origin = os.getenv("AUTOPOST_PUBLIC_URL", "").rstrip("/")
@@ -890,6 +911,8 @@ def start_checkout():
 
 @app.route("/billing/portal", methods=["POST"])
 def subscription_portal():
+    if preview_mode():
+        abort(403, "Billing is disabled in free preview mode")
     key = os.getenv("STRIPE_SECRET_KEY")
     origin = os.getenv("AUTOPOST_PUBLIC_URL", "").rstrip("/")
     with app_control.connect() as c:
