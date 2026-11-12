@@ -12,6 +12,18 @@ services:
       mountPath: /var/data
       sizeGB: 1
     envVars:
+      - key: AUTOPOST_REQUIRE_PAYMENT
+        value: "true"
+      - key: AUTOPOST_PUBLIC_URL
+        sync: false
+      - key: AUTOPOST_WORKER_TOKEN
+        generateValue: true
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_BASIC_PRICE_ID
+        sync: false
       - key: AUTOPOST_APP_PASSWORD
         sync: false
       - key: AUTOPOST_WEB_SECRET
