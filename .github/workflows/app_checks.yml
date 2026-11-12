@@ -1,6 +1,21 @@
 name: Mobile control app checks
 
 on:
+  push:
+    branches: [feature/saas-appstore-foundation-2026-11]
+    paths:
+      - "app_mvp.py"
+      - "app_control.py"
+      - "meta_accounts.py"
+      - "automation_setup.py"
+      - "public_setup.py"
+      - "templates/**"
+      - "static/brand/**"
+      - "website/**"
+      - "tests/**"
+      - "scripts/qa/**"
+      - "requirements*.txt"
+      - ".github/workflows/app_checks.yml"
   pull_request:
     paths:
       - "app_mvp.py"
@@ -17,6 +32,8 @@ on:
       - "templates/_icons.html"
       - "website/index.html"
       - "templates/dashboard.html"
+      - "static/brand/**"
+      - "scripts/qa/**"
       - "control_bridge.py"
       - "app_mvp_wsgi.py"
       - "requirements-app.txt"
@@ -45,3 +62,16 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_app_control.py' -v
       - name: Run existing publishing regressions
         run: python -m unittest discover -s tests -v
+      - name: Install test browser
+        run: python -m playwright install --with-deps chromium
+      - name: Check desktop and phone setup screens
+        env:
+          AUTOPOST_QA_ARTIFACT_DIR: qa-artifacts
+        run: python scripts/qa/brand_setup_smoke.py
+      - name: Save browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auto-poster-app-preview
+          path: qa-artifacts/
+          if-no-files-found: ignore

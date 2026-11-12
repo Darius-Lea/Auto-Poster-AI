@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0b1220">
-<meta name="description" content="Set up Auto Poster AI before creating an account or subscribing.">
+<meta name="description" content="Choose your channels, create a post and review your posting plan with Auto Poster AI.">
 <title>Set up your posting · Auto Poster AI</title>
 <style>
 :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:dark;--bg:#0b1220;--bg2:#122037;--card:#17273a;--line:#31485e;--ink:#f4f8fb;--muted:#b7c7d5;--green:#c8f68a;--sky:#8bd6fa}
@@ -62,18 +62,21 @@ textarea{min-height:145px;resize:vertical}
 @media(max-width:600px){.wrap{padding:14px 15px 70px}.heading{padding:31px 0 20px}h1{letter-spacing:-1.8px}.steps{gap:5px}.step{padding:10px 3px;justify-content:center;flex-direction:column;text-align:center;font-size:10px}.step span{width:24px;height:24px}.platform-grid,.split{grid-template-columns:1fr}.sidebar{grid-template-columns:1fr}.card{padding:20px}.actions{display:grid;grid-template-columns:1fr}.actions .btn{width:100%}.linksub{font-size:11px}.brand{font-size:15px}}
 @media(prefers-reduced-motion:reduce){.platform{transition:none}}
 </style>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png" sizes="180x180">
+<link rel="stylesheet" href="/static/brand/brand.css">
 </head>
 <body>
 {% include "_icons.html" %}
 <div class="wrap">
 <header>
- <a class="brand" href="/welcome" aria-label="Auto Poster AI homepage"><span class="brand-mark"><svg class="icon icon-lg"><use href="#ico-arrow-up-right"/></svg></span>Auto Poster AI</a>
+ <a class="brand" href="/welcome" aria-label="Auto Poster AI homepage"><img class="brand-icon" src="/static/brand/mark.svg" width="40" height="40" alt="">Auto Poster AI</a>
  <a class="linksub" href="/welcome">Back to website</a>
 </header>
 <section class="heading">
  <div class="eyebrow">FREE SETUP · NO ACCOUNT REQUIRED TO START</div>
- <h1>Make your plan <span>before you pay.</span></h1>
- <p>Choose the platforms, draft your content, and set a schedule. You won't be asked to sign in or pay until you've finished planning.</p>
+ <h1>Your next post. <span>Planned your way.</span></h1>
+ <p>Choose your channels, create a post, and decide when it should appear. Review everything before you save.</p>
 </section>
 <nav class="steps" id="step-nav" aria-label="Setup progress">
  <div class="step active" data-progress="1"><span>1</span>Platforms</div>
@@ -148,12 +151,12 @@ textarea{min-height:145px;resize:vertical}
    <option value="approve_every_post">Let me review each post</option>
    <option value="auto_when_supported">Allow Autopilot after I explicitly turn it on</option>
   </select>
-  <div class="alert"><svg class="icon"><use href="#ico-shield"/></svg><span>Paying for a plan will <strong>never automatically activate</strong> saved publishing. You must connect authorized accounts and deliberately start supported automation.</span></div>
+  <div class="alert"><svg class="icon"><use href="#ico-shield"/></svg><span><strong>You decide when publishing starts.</strong>Saving your schedule keeps it as a plan. Supported automation starts only after you connect an account and explicitly activate it.</span></div>
  </section>
  <section class="panel" data-step="4" hidden>
   <div class="eyebrow">STEP 04 / 04</div>
   <h2>Review your setup</h2>
-  <p>This is your plan, not an order or a subscription. Confirm what you want Auto Poster AI to do.</p>
+  <p>Check your content, destinations and timing. You can go back and change any step.</p>
   <div class="review" id="review-list" aria-live="polite"></div>
   <div class="alert"><svg class="icon"><use href="#ico-lock"/></svg><span><strong>No account, payment, or external publishing yet.</strong>Your work is currently kept only in this browser on this device. It isn't stored in a customer account and may be lost if browser data is cleared.</span></div>
   <div id="saved-success" class="complete" hidden><svg class="icon icon-lg"><use href="#ico-check"/></svg><span><strong>Setup saved on this device.</strong><small>You can edit it again before registering.</small></span></div>
@@ -162,6 +165,7 @@ textarea{min-height:145px;resize:vertical}
    <button type="button" class="btn secondary" id="download-setup"><svg class="icon"><use href="#ico-file"/></svg> Download my setup as a backup</button>
    <a class="btn secondary" id="owner-login" href="/login" hidden><svg class="icon"><use href="#ico-lock"/></svg> Continue to private beta dashboard</a>
   </div>
+  <p class="caption">Activating supported publishing requires authorized account connections and an active subscription. Review the plan details in Settings before you activate.</p>
   <p class="caption">Public customer sign-up is still being built. The dashboard currently requires the private beta owner password; it does not give unrelated customers access to each other's data.</p>
  </section>
  <div class="actions" id="wizard-actions">
@@ -172,8 +176,8 @@ textarea{min-height:145px;resize:vertical}
 </form>
 </main>
 <aside class="sidebar">
- <div class="side-card"><h3><svg class="icon"><use href="#ico-shield"/></svg> Set up without pressure</h3>
-  <p>Explore the planning process before creating an account or subscribing.</p>
+ <div class="side-card"><h3><svg class="icon"><use href="#ico-shield"/></svg> Your next post, step by step</h3>
+  <p>Build a plan you can review and adjust at every step.</p>
   <ul><li>Choose your destinations first</li><li>Write and preview your content</li><li>Decide on a schedule</li><li>Keep live posting off until approved</li></ul>
  </div>
  <div class="side-card">

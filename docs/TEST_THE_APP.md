@@ -1,99 +1,53 @@
-# Test Auto Poster AI — working single-owner starter
+# Test Auto Poster AI — single-owner web beta
 
-This app is separate from the legacy scheduled Fort Wayne pipeline. The legacy
-GitHub Actions workflow continues unchanged on `main`.
+The current web app is on `feature/saas-appstore-foundation-2026-11`. It is separate from the legacy scheduled Fort Wayne publisher on `main`; changing the web app does not establish a change to that publisher or its deployment.
 
-## Exactly what works in this first build
+## Implemented behavior
 
-- Password-protected mobile-friendly web dashboard
-- Compose arbitrary text (news, personal, business, pet adoption, creators, etc.)
-- Tap **+ Add apps or websites** to choose multiple destinations in one post
-- Select **Post now / Schedule later** and **Once / Daily / Weekly**
-- Repeating supported posts reschedules the same text after a confirmed success; click **Stop repeating** to halt a series
-- In the Post composer, **Post to my website** records a destination request,
-  but it remains **Needs connection** until a site-specific publishing integration exists
-- The separate **Watch a website** screen collects a monitoring request without
-  publishing anything. It does not yet scrape or poll the URL; it is setup only
-- Schedule text-only posts to an authorized Facebook **Page** using the
-  existing official Meta Page API client
-- Schedule posts to the **draft** destination: those are saved internally and
-  marked draft_ready when due, **not** published to a social network
-- Save intended Instagram, TikTok, YouTube, LinkedIn, Pinterest, Threads, X and
-  arbitrary website destinations as **Needs connection**. These are NOT sent.
-- See queued, published, needs-review and cancelled statuses
-- Background server scheduler running every ~20 seconds while server is up
-- Manual cancellation of scheduled posts
-- Hold ambiguous deliveries for review instead of automatically reposting them
+- Public `/welcome` website and `/start` four-step planning flow: choose platforms, write a text post, choose timing and review. The anonymous setup is saved in browser storage with an optional downloadable backup.
+- Private owner login and optional authenticated import of a public setup into an inactive plan. Importing a plan or paying does not turn on publishing.
+- Mobile-friendly owner dashboard, saved automation preferences, text composition, multiple selected destinations, post review, one-time scheduling and optional daily/weekly repetition of the same text.
+- Internal draft scheduling: due drafts become `draft_ready`; they are not sent to a social network.
+- Facebook Page OAuth connection/discovery/selection/disconnection routes, encrypted token storage primitives and official Page API text publishing. These require configured service-owned Meta credentials, the appropriate permissions and live validation. They do not provide public customer accounts by themselves.
+- Stripe checkout/portal routes, signature-verified subscription webhook handling and server-side entitlements. These require configured Stripe settings and live validation. Saving a plan never triggers a checkout or automatic activation.
+- Saved `setup_only` posts when unpaid or in preview, with explicit later activation of supported publishing. An expired proposed posting time must be replaced before activation.
+- A server scheduler while the service is running, cancellation/stop-repeat controls and holds for uncertain delivery outcomes instead of blind reposting.
+- Original Signal Fold branding, responsive artwork, iPhone touch icon and PNG/SVG/maskable browser install icons.
 
-## Not implemented yet
+## What remains unfinished or unverified
 
-No Canva connection in this build. No photo/video uploading, live website
-scraping or polling, RSS import, account OAuth connection wizard, Facebook personal-profile
-posting, Instagram/YouTube/TikTok/X/LinkedIn direct publishing, real analytics,
-automatic caption generation, subscription billing, tenant accounts, or App Store
-binary. Those features are planned work, not operational here.
+Public customer registration, independent accounts and tenant isolation are not implemented. The starter uses one owner password/workspace. Do not share that private owner account with unrelated customers.
 
-**Do not give this starter to customers yet.** Its password is shared between
-all visitors and it does not isolate tenants. Deploy privately for the owner only.
+Photo/video uploads, video clipping, Canva integration, live general website/RSS collection, most social publishing connectors and real account analytics remain unfinished. Selecting a planned network or source only saves an intention; it does not grant permissions or enable an integration. The legacy pipeline's caption/source features do not automatically make those features available in this general composer.
 
-## Test locally
+Facebook OAuth and Stripe code now exist, but production approvals, configured credentials, actual authorization/purchase flows and confirmed live delivery must still be verified. The previous statement that all OAuth/subscription code was absent is superseded by these implementation details. No native iOS/Android binaries or store release exist yet.
 
-1. From this feature branch, install Python 3.11 and dependencies:
-   `pip install -r requirements-app.txt`
-2. Set `AUTOPOST_APP_PASSWORD` to a new long random password (12+ characters).
-3. Set `AUTOPOST_WEB_SECRET` to a different strong random 32+ character value.
-4. Optional: to publish to the authorized Facebook **Page**, set
-   `META_PAGE_ID`, `META_PAGE_ACCESS_TOKEN`, and optionally
-   `META_GRAPH_VERSION`. These secrets belong server-side only.
-5. Run `python app_mvp.py`.
-6. Open `http://127.0.0.1:8080`, sign in and schedule a **draft** post first.
-7. For production-like local WSGI testing, set
-   `AUTOPOST_COOKIE_SECURE=false` when using plain HTTP, then run
-   `gunicorn --workers 1 --threads 2 --bind 127.0.0.1:8080 app_mvp_wsgi:app`.
-   Set this back to true behind HTTPS.
+## Safe local walkthrough
 
-Use the **Post** composer and open **+ Choose where to post**. Pick one or more
-apps, add your own website publishing destination if desired, then Post now or choose
-an exact local date/time. The server stores UTC for the due time and the local
-timezone for repeating schedules. Daily and weekly repeats are hidden in Advanced and repeat the **same text**;
-they create the next job only after the previous delivery is confirmed or a draft is ready; errors
-and uncertain outcomes hold the series rather than silently reposting.
-Leave the server running for unattended delivery.
+1. Check out the web feature branch. Use a project-local Python environment and install `requirements-preview.txt` for the lightweight visual preview, or `requirements-app.txt` for the full app/regression dependencies.
+2. Use a separate test database path in `AUTOPOST_WEB_DB`. Set `AUTOPOST_APP_PASSWORD` to a new long password (at least 12 characters) and `AUTOPOST_WEB_SECRET` to a stable unpredictable secret (at least 32 characters). Keep secrets out of source/chat.
+3. Set `AUTOPOST_PREVIEW_MODE=true`, `AUTOPOST_PUBLIC_LANDING=true` and `AUTOPOST_REQUIRE_PAYMENT=true`. For local HTTP WSGI testing only, set `AUTOPOST_COOKIE_SECURE=false`; restore `true` behind HTTPS.
+4. Run `python app_mvp.py`, then open `http://127.0.0.1:8080/welcome`. Alternatively run `gunicorn --workers 1 --threads 2 --bind 127.0.0.1:8080 app_mvp_wsgi:app`.
+5. Complete `/start`, review and save. Reload and confirm the draft remains in that browser. Download a backup if desired. Sign in at `/login` and deliberately import the prepared setup; it remains inactive.
+6. In the owner composer, choose the internal draft destination and review a post. Confirm its scheduled/status transitions, and test cancellation or repetition only with a draft. Preview mode blocks external publication, checkout and Facebook connection.
+7. Verify `/icon.svg`, `/manifest.webmanifest` and the brand images load. Phone-sized browser checks do not establish physical iPhone installation behavior.
 
-**Important:** Facebook posting publishes to the configured Page when due.
-Use a test Page, or verify the content and schedule carefully before testing
-against a live business Page.
+The scheduler runs while the process is running. One Gunicorn worker is required; multiple worker processes start duplicate scheduler loops. Daily/weekly repeats schedule the same text after confirmed success, preserve the chosen local timezone and hold on errors/uncertainty. They do not generate fresh content.
 
-## Try on iPhone using Render
+## Live owner testing
 
-Use the `render-mvp.yaml` Blueprint on this branch to create a separate paid
-persistent web service. Fill in secrets through Render's dashboard. After a
-successful deployment visit the Render HTTPS URL on your phone.
+Use the existing web service and instructions in [RELEASE_2026-11-12.md](RELEASE_2026-11-12.md). No actual Render hostname or deployed branch is established by this repository. A GitHub push alone does not prove deployment.
 
-The existing `render.yaml` and GitHub Actions configuration are left alone.
-Do not copy your Facebook Page token into source code or user-visible forms.
-Do not use Render's ephemeral filesystem for reliable scheduling.
+Keep a durable SQLite path and use one service instance. Do not reset data to change branding or switch backends. A sleeping/ephemeral preview cannot provide reliable unattended delivery.
 
-## Operational caveats
-
-- **One Gunicorn worker only**; multiple workers create duplicate scheduler
-  threads. SQLite is single-instance and must live on persistent disk.
-- A lost response after a possible Facebook publication becomes
-  `needs_review`; manually inspect the Page before deciding to repost.
-- Stopping the app stops the scheduler; an always-on server is required.
-- Do not put unauthenticated endpoints or real customer passwords into this app.
-- Hosted delivery is not verified until you actually deploy the service and
-  confirm a Facebook Page post ID.
-- The developer still needs Meta credentials and required approvals. Customers
-  will use OAuth in the future customer version, not developer keys.
+Only after explicitly preparing a controlled live test should preview mode be disabled and the required Meta/Stripe configuration enabled. Confirm the intended Facebook Page and permitted content, active entitlement, explicit post activation and returned remote post ID. Live platform actions and purchases are not covered by offline mock tests.
 
 ## Website source versus destination
 
-- **Post to my website** means delivering content **to** a connected CMS/blog.
-  This starter only records the request; it cannot post to arbitrary URLs.
-- **Watch a website** means monitoring a permitted source for new items.
-  It has its own `/website` setup screen and separate table; **no polling,
-  scraping or auto-publishing happens yet**. A URL alone does not authorize
-  scraping, copying media, or posting.
-- A brand-new text post defaults to **Once**. The advanced Daily/Weekly option
-  explicitly repeats identical content; it does not synthesize fresh posts.
+- A website destination means delivering to a connected CMS/blog. Arbitrary website URLs in this starter remain setup intentions until a site-specific publisher exists.
+- A website source means monitoring permitted material for new content. The `/website` screen records a request; it does not implement general polling, scraping or automatic publishing.
+- The public wizard's date/frequency fields describe preferences until an account/integration and explicit activation complete the real workflow.
+
+## Recorded validation
+
+For the November 12, 2026 release candidate, the full offline suite passed **239 tests**. The focused public-onboarding, preview, unpaid-setup and web-starter suites passed **31 tests**, and `scripts/qa/brand_setup_smoke.py` passed real desktop/mobile Chromium walkthroughs for branded screens, setup, local save/restoration, dashboard and automation pages. These results do not certify production hosting, real external publication, physical mobile devices or store readiness. See [STORE_LAUNCH.md](STORE_LAUNCH.md) for the later Apple/Google launch stages.

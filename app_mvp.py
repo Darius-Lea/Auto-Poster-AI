@@ -389,11 +389,12 @@ document.getElementById('time_zone').value=Intl.DateTimeFormat().resolvedOptions
 
 LOGIN = """<!doctype html><html><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Auto Poster AI</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png"><link rel="stylesheet" href="/static/brand/brand.css"><meta name="theme-color" content="#0b1424">
 <style>body{background:#101218;color:white;font:16px system-ui;max-width:370px;margin:15vh auto;padding:20px}
 input,button{box-sizing:border-box;width:100%;padding:15px;margin:10px 0;border-radius:10px;font:inherit}
 input{background:#222834;color:white;border:1px solid #444}
 button{background:#beee83;border:0;color:#122007;font-weight:700}
-p{color:#b1b9c9}</style><h1>✦ Auto Poster AI</h1><p>Sign in to your private starter dashboard.</p>
+p{color:#b1b9c9}</style><h1 class="brand-login-logo"><img class="brand-icon" src="/static/brand/mark.svg" width="48" height="48" alt="">Auto Poster AI</h1><p>Sign in to your private starter dashboard.</p>
 <form method="post" action="/login"><input name="password" type="password"
 autocomplete="current-password" placeholder="App password" required>
 <button>Sign in</button></form></html>"""
@@ -939,21 +940,21 @@ button.secondary{background:#2f4050;color:white}
 
 @app.route("/manifest.webmanifest")
 def manifest():
-    return jsonify({"name": "Auto Poster AI", "short_name": "Auto Poster",
+    return jsonify({"id": "/", "name": "Auto Poster AI", "short_name": "Auto Poster",
                     "start_url": "/", "display": "standalone",
-                    "background_color": "#101319", "theme_color": "#101319",
-                    "icons": [{"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml"}]})
+                    "background_color": "#0b1424", "theme_color": "#0b1424",
+                    "icons": [
+                        {"src": "/static/brand/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+                        {"src": "/static/brand/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+                        {"src": "/static/brand/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+                        {"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"},
+                    ]})
 
 
 @app.route("/icon.svg")
 def app_icon():
-    return Response(
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">'
-        '<rect width="128" height="128" rx="29" fill="#162333"/>'
-        '<path d="M26 94L57 22H71L103 94H83L73 69H52L43 94Z" fill="#bdf68c"/>'
-        '<path d="M26 77Q62 50 111 35L99 57Q64 64 26 77Z" fill="#68baff"/>'
-        '</svg>', mimetype="image/svg+xml"
-    )
+    return send_from_directory("static/brand", "app-icon.svg", mimetype="image/svg+xml")
+
 
 
 @app.route("/control", methods=["GET", "POST"])

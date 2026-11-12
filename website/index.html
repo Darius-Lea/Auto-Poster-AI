@@ -8,6 +8,14 @@
 <meta property="og:type" content="website">
 <meta property="og:title" content="Auto Poster AI — Your content, on autopilot">
 <meta property="og:description" content="One place to plan posts, run approved automations and understand what works.">
+<meta property="og:image" content="/static/brand/social-card.png">
+<meta property="og:image:alt" content="Auto Poster AI — create, review and schedule your content">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Auto Poster AI — Your content, on autopilot">
+<meta name="twitter:description" content="Create your next post, review your content and plan your schedule.">
+<meta name="twitter:image" content="/static/brand/social-card.png">
 <title>Auto Poster AI · Your content, on autopilot</title>
 <style>
 :root{--bg:#0b1220;--bg2:#111e2d;--card:#162539;--ink:#f6fafb;--muted:#b3c3d0;--line:#2c4358;--lime:#c5fb86;--blue:#89d1ff;--soft:#dceaff;--dark:#07101a;scroll-behavior:smooth;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:dark}
@@ -34,7 +42,11 @@ h1{font-size:clamp(43px,5.4vw,72px);letter-spacing:-3.5px;line-height:1.08;margi
 @media(max-width:980px){.hero-grid{grid-template-columns:1fr;gap:45px}.canvas{max-width:650px}.pricing{grid-template-columns:repeat(2,1fr)}.cards{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:650px){.wrap{padding:0 17px}.nav-inner{height:67px}.nav-toggle{display:block}.nav-links{display:none;position:absolute;top:67px;left:0;right:0;flex-direction:column;align-items:stretch;padding:18px;background:var(--bg2);border-bottom:1px solid var(--line);gap:17px}.nav-links.open{display:flex}.hero{padding:63px 0}.hero h1{letter-spacing:-2.2px}.hero p{font-size:16px}.canvas{padding:8px;transform:none}.app{padding:15px;min-height:350px}.metrics strong{font-size:17px}.metrics>div{padding:12px 3px}.section{padding:65px 0}.cards,.steps,.pricing{grid-template-columns:1fr}.step{min-height:0}.strip{padding:27px;display:block}.strip .btn{margin-top:20px}.foot-inner{display:block}.foot nav{margin-top:20px}.plan{min-height:0}}
 @media(prefers-reduced-motion:reduce){:root{scroll-behavior:auto}.btn{transition:none}}
+.brand-hero{margin:0;min-width:0;position:relative;border:1px solid #385368;border-radius:28px;background:radial-gradient(circle at 50% 45%,#2d5b5144,transparent 67%),#0d1b2a;overflow:hidden;box-shadow:0 28px 90px #02091466}.brand-hero-art{display:block;width:100%;height:auto;aspect-ratio:1;object-fit:contain}.brand-hero figcaption{position:relative;display:flex;align-items:center;justify-content:center;gap:15px;padding:0 18px 23px;color:#c3d9cf;font-size:10px;font-weight:750;letter-spacing:2px}.brand-hero figcaption>span:not(.brand-hero-line){color:#678c87}.brand-hero-line{display:inline-block;width:22px;height:2px;background:var(--lime)}@media(max-width:980px){.brand-hero{max-width:580px;justify-self:center;width:100%}}@media(max-width:650px){.brand-hero{border-radius:21px}.brand-hero figcaption{font-size:9px;gap:10px;padding-bottom:18px}}
 </style>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png" sizes="180x180">
+<link rel="stylesheet" href="/static/brand/brand.css">
 </head>
 <body>
 <svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" aria-hidden="true" style="position:absolute;overflow:hidden">
@@ -68,7 +80,7 @@ h1{font-size:clamp(43px,5.4vw,72px);letter-spacing:-3.5px;line-height:1.08;margi
 </style>
 <nav class="nav" aria-label="Main navigation">
 <div class="wrap nav-inner">
-<a class="brand" href="#top" aria-label="Auto Poster AI home"><span class="logo" aria-hidden="true">↗</span><span>Auto Poster <span style="color:var(--lime)">AI</span></span></a>
+<a class="brand" href="#top" aria-label="Auto Poster AI home"><img class="brand-icon" src="/static/brand/mark.svg" width="40" height="40" alt=""><span>Auto Poster <span style="color:var(--lime)">AI</span></span></a>
 <button class="nav-toggle" id="menu" type="button" aria-controls="links" aria-expanded="false" aria-label="Toggle menu"><svg class="icon"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
 <div class="nav-links" id="links">
 <a href="#features">Features</a><a href="#how">How it works</a><a href="#pricing">Pricing</a><a href="#questions">FAQ</a>
@@ -83,15 +95,10 @@ h1{font-size:clamp(43px,5.4vw,72px);letter-spacing:-3.5px;line-height:1.08;margi
 <div class="actions"><a class="btn" href="/start">Start for free <span aria-hidden="true">→</span></a><a class="btn outline" href="#how">How it works</a></div>
 <div class="tiny">No password. No card. Choose your platforms, create a post and plan your schedule first.</div>
 </div>
-<div class="canvas" aria-label="Illustration of the Auto Poster AI dashboard. Values are sample only.">
-<div class="app">
-<div class="appheader"><strong><svg class="icon icon-lg" aria-hidden="true"><use href="#ico-arrow-up-right"/></svg> Auto Poster AI</strong><span class="mark">ILLUSTRATIVE</span></div>
-<h3>Your pages, your rules.</h3>
-<p class="sub">A single place to stay in control.</p>
-<div class="health"><div><b>Autopilot</b><br><span>Turn your approved schedules on or off.</span></div><div class="switch"></div></div>
-<div class="metrics"><div><strong>24</strong><small>Posts</small></div><div><strong>5.8k</strong><small>Views</small></div><div><strong>+12%</strong><small>Growth</small></div></div>
-<div class="previewposts"><b>Upcoming activity</b><div class="fakepost"><i class="status-dot"></i> <span>Scheduled update</span> <em>Ready</em></div><div class="fakepost"><i class="status-dot"></i> <span>Content calendar</span> <em>Active</em></div><div class="fakepost"><i class="status-dot idle"></i> <span>New social channel</span> <span style="flex:0">Connect first</span></div></div>
-</div></div>
+<figure class="brand-hero" aria-label="Auto Poster AI publishing illustration">
+<img class="brand-hero-art" src="/static/brand/publishing-orbit.png" alt="" width="1024" height="1024" fetchpriority="high" decoding="async">
+<figcaption><span class="brand-hero-line" aria-hidden="true"></span>CREATE <span aria-hidden="true">/</span> REVIEW <span aria-hidden="true">/</span> SCHEDULE</figcaption>
+</figure>
 </div></section>
 <section class="section" id="features"><div class="wrap">
 <div class="center"><div class="eyebrow">Everything together</div><h2 class="section-title">Less busywork. More control.</h2><p class="lead">Keep the parts you enjoy about creating. Let the software handle repeatable publishing tasks when those platforms and sources support automation.</p></div>
@@ -104,11 +111,11 @@ h1{font-size:clamp(43px,5.4vw,72px);letter-spacing:-3.5px;line-height:1.08;margi
 <article class="card"><div class="card-icon"><svg class="icon icon-lg" aria-hidden="true"><use href="#ico-shield"/></svg></div><h3>Know what happened</h3><p>Clear scheduled, published, paused and needs-attention statuses. No mystery posting.</p></article>
 </div></div></section>
 <section class="section alt" id="how"><div class="wrap">
-<div class="center"><div class="eyebrow">Simple by design</div><h2 class="section-title">Plan your workflow for free.</h2></div>
+<div class="center"><div class="eyebrow">Simple by design</div><h2 class="section-title">From idea to a clear posting plan.</h2></div>
 <div class="steps">
-<div class="step"><b>STEP 01</b><h3>Design your setup</h3><p>Choose topics, a future Page, posting schedule and approval settings at no cost.</p></div>
+<div class="step"><b>STEP 01</b><h3>Design your setup</h3><p>Choose your channels, content topics, posting schedule and approval preferences.</p></div>
 <div class="step"><b>STEP 02</b><h3>Review and connect</h3><p>Prepare posts and authorize a supported account through the platform's official flow.</p></div>
-<div class="step"><b>STEP 03</b><h3>Activate when ready</h3><p>Subscribe and explicitly enable supported publishing. Nothing starts merely because you saved a plan.</p></div>
+<div class="step"><b>STEP 03</b><h3>Review, then activate</h3><p>Check your content, connections and plan details before you explicitly enable supported publishing.</p></div>
 </div>
 </div></section>
 <section class="section" id="pricing"><div class="wrap">
@@ -125,7 +132,7 @@ h1{font-size:clamp(43px,5.4vw,72px);letter-spacing:-3.5px;line-height:1.08;margi
 <section class="section" id="questions"><div class="wrap">
 <div class="center"><div class="eyebrow">Good questions</div><h2 class="section-title">Know exactly what to expect.</h2></div>
 <div class="faq">
-<details><summary>Do I need an account or password to begin?</summary><p>No. The free setup wizard lets you choose platforms, write your post, select a schedule, and review the plan before any login. Your draft is stored on this device, not on a customer account. The existing private owner dashboard requires an owner password until independent customer accounts are implemented.</p></details><details><summary>Can I set up an automation before paying?</summary><p>Yes. Save topics, future destinations, frequency and approval preferences without subscribing. Publishing starts only after integrations are ready, paid access is active, and you explicitly approve activation.</p></details>
+<details><summary>Do I need an account or password to begin?</summary><p>No. The free setup wizard lets you choose platforms, write your post, select a schedule, and review the plan before any login. Your draft is stored on this device, not on a customer account. The existing private owner dashboard requires an owner password until independent customer accounts are implemented.</p></details><details><summary>Can I review my workflow before activating it?</summary><p>Yes. Choose your topics, destinations, timing and approval preferences, then review the complete plan. Activating supported publishing requires authorized connections and an active subscription. Saving a setup alone never starts publishing.</p></details>
 <details><summary>Do I have to give you my social media password?</summary><p>No. The customer version will use each supported platform's official connection screens. Platform approvals and eligible account types determine what can be published automatically.</p></details>
 <details><summary>Does it work on every platform right now?</summary><p>Not yet. Our existing owner-operated publisher supports Facebook Pages, and the mobile web starter can schedule Facebook Page text posts. Other platforms require separately approved publishing integrations.</p></details>
 <details><summary>Can it publish while my phone is off?</summary><p>Yes, when deployed on an always-on server with a valid authorization, a supported destination, and an active subscription. The hosted scheduler does the work, not your phone.</p></details>
@@ -134,7 +141,7 @@ h1{font-size:clamp(43px,5.4vw,72px);letter-spacing:-3.5px;line-height:1.08;margi
 <details><summary>Can I download the iPhone app now?</summary><p>The browser-based owner preview is in development. A public iOS App Store release requires production hosting, an iOS application, subscription support and Apple approval.</p></details>
 </div></div></section>
 </main>
-<footer class="foot"><div class="wrap foot-inner"><div><div class="brand"><span class="logo" aria-hidden="true">↗</span><span>Auto Poster AI</span></div><small>Automate responsibly. Grow on your terms.</small><small>© <span id="year">2026</span> Auto Poster AI. All rights reserved.</small></div>
+<footer class="foot"><div class="wrap foot-inner"><div><div class="brand"><img class="brand-icon" src="/static/brand/mark.svg" width="40" height="40" alt=""><span>Auto Poster AI</span></div><small>Automate responsibly. Grow on your terms.</small><small>© <span id="year">2026</span> Auto Poster AI. All rights reserved.</small></div>
 <nav aria-label="Footer links"><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="/login">Owner beta sign-in</a></nav></div></footer>
 <script>
 document.getElementById("year").textContent=new Date().getFullYear();

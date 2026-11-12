@@ -41,12 +41,15 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
 @media(max-width:700px){.content-grid{grid-template-columns:1fr}.metrics{gap:7px}.metric{padding:14px 9px}.metric strong{font-size:23px}.metric small{font-size:10px}.card{padding:17px}.banner{display:block;margin-top:20px}.banner .badge{margin-top:10px}.main{padding-left:15px;padding-right:15px}.side{padding:13px 17px}.mobile-nav{display:grid;position:fixed;bottom:0;left:0;right:0;grid-template-columns:repeat(5,1fr);z-index:25;background:#0e1928ed;border-top:1px solid #3c4d5b;padding:9px 4px max(10px,env(safe-area-inset-bottom));backdrop-filter:blur(15px)}.mobile-nav a{font-size:11px;color:#c7d6e3;text-align:center;display:grid;gap:2px}.mobile-nav a .icon{width:21px;height:21px;margin:auto}.mobile-nav a:hover{text-decoration:none;color:var(--green)}.main{padding-bottom:110px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 </style>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png" sizes="180x180">
+<link rel="stylesheet" href="/static/brand/brand.css">
 </head>
 <body>
 {% include "_icons.html" %}
 <div class="shell">
 <aside class="side">
- <div class="logo"><span class="symbol"><svg class="icon" aria-hidden="true"><use href="#ico-arrow-up-right"/></svg></span>Auto Poster <span>AI</span></div>
+ <div class="logo"><img class="brand-icon" src="/static/brand/mark.svg" width="34" height="34" alt="">Auto Poster <span>AI</span></div>
  <nav class="navlinks" aria-label="Dashboard navigation">
   <a href="#overview" class="active"><svg class="icon" aria-hidden="true"><use href="#ico-grid"/></svg> Home</a>
   <a href="#create"><svg class="icon" aria-hidden="true"><use href="#ico-pencil"/></svg> Create a post</a>
@@ -68,7 +71,7 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
   <div class="banner" role="status"><div><b><svg class="icon" aria-hidden="true"><use href="#ico-check"/></svg> Setup imported into private beta</b><p>Your chosen platforms, content and timing have been saved as an inactive plan. Nothing is publishing. Free preview storage can reset.</p></div><span class="badge good">SETUP SAVED</span></div>
   {% endif %}
   <div id="guest-import" class="card" hidden>
-   <div class="split"><h2><svg class="icon" aria-hidden="true"><use href="#ico-file"/></svg> Your free setup is ready to transfer</h2><span class="badge good">NO PAYMENT</span></div>
+   <div class="split"><h2><svg class="icon" aria-hidden="true"><use href="#ico-file"/></svg> Your setup is ready to transfer</h2><span class="badge good">READY TO SAVE</span></div>
    <p>You prepared a post and schedule before signing in. Save them in this private beta dashboard now—publishing will stay off.</p>
    <div id="guest-summary" class="help"></div>
    <form method="post" action="/start/import" id="guest-import-form">
@@ -79,9 +82,9 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
    <p class="small">This beta uses a single owner account. Public multi-user accounts are not available yet.</p>
   </div>
   {% if preview_mode %}
-  <div class="banner" role="status"><div><b><svg class="icon" aria-hidden="true"><use href="#ico-shield"/></svg> Free beta: safe preview mode</b><p>Build automation plans, posting schedules and drafts without paying. This free preview cannot publish externally and may lose saved setups after a restart.</p></div><span class="badge">TEST MODE</span></div>
+  <div class="banner" role="status"><div><b><svg class="icon" aria-hidden="true"><use href="#ico-shield"/></svg> Free beta: safe preview mode</b><p>Create content, plan your schedule and try the workflow. This preview cannot publish externally and may lose saved setups after a restart.</p></div><span class="badge">TEST MODE</span></div>
   {% elif payment_required and not paid %}
-  <div class="banner" role="status"><div><b><svg class="icon" aria-hidden="true"><use href="#ico-lock"/></svg> Setup is free. Publishing is paused.</b><p>Build your content plan now. Subscribe only when you're ready to activate supported publishing.</p></div><a class="button-secondary" href="/control">Manage billing</a></div>
+  <div class="banner" role="status"><div><b><svg class="icon" aria-hidden="true"><use href="#ico-lock"/></svg> Publishing is not active.</b><p>Create your content and prepare your schedule. Review your connections and activation settings when you are ready to start.</p></div><a class="button-secondary" href="/control">Activation settings</a></div>
   {% endif %}
   <div class="metrics">
    <div class="metric"><strong>{{counts.get('scheduled',0)}}</strong><small>Scheduled</small></div>
@@ -89,7 +92,7 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
    <div class="metric"><strong>{{counts.get('setup_only',0)}}</strong><small>Saved setups</small></div>
   </div>
   <section class="card" aria-label="Getting started">
- <div class="split"><h2>Plan first, pay when ready</h2><span class="badge good">No payment required</span></div>
+ <div class="split"><h2>Prepare your next post</h2><span class="badge good">YOU ARE IN CONTROL</span></div>
  <p>Set your preferred content, Pages and timing now. Saving a plan does not start publishing.</p>
  <ol class="steps">
   <li><span class="number">1</span><span><b>Choose your destination</b><small><a href="/pages">View Facebook Pages</a>, or plan for a Facebook Page you will connect later.</small></span></li>
@@ -113,7 +116,7 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
      {% if fb_enabled and not preview_mode %}
      <label class="destination" for="legacyfacebook"><input type="checkbox" id="legacyfacebook" name="destinations" value="facebook"><span class="desc"><b>Existing Facebook Page</b><small>Uses the owner's existing Page authorization</small></span><span class="badge good">Connected</span></label>
      {% else %}
-     <label class="destination" for="facebook-plan"><input type="checkbox" id="facebook-plan" name="destinations" value="facebook"><span class="desc"><b>Facebook Page — plan now</b><small>Save this post and its timing before you connect or subscribe.</small></span><span class="badge">Setup only</span></label>
+     <label class="destination" for="facebook-plan"><input type="checkbox" id="facebook-plan" name="destinations" value="facebook"><span class="desc"><b>Facebook Page — plan now</b><small>Save this post and its timing, then connect the Page you want to use.</small></span><span class="badge">Setup only</span></label>
      {% endif %}
      {% for pg in fb_pages %}{% if pg.can_publish and not preview_mode %}
      <label class="destination" for="fb{{pg.page_id}}"><input type="checkbox" id="fb{{pg.page_id}}" name="facebook_pages" value="{{pg.page_id}}"><span class="desc"><b>{{pg.name}}</b><small>Facebook business Page</small></span><span class="badge good">Connected</span></label>
@@ -126,7 +129,7 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
     <input type="hidden" id="utc_due" name="utc_due"><input type="hidden" id="time_zone" name="time_zone" value="UTC">
     <details><summary>More options · Repeat this same message</summary><div class="details-inner"><label for="frequency">Repeat frequency</label><select name="frequency" id="frequency"><option value="once">Do not repeat</option><option value="daily">Every day — same wording</option><option value="weekly">Every week — same wording</option></select><p class="footnote">This doesn't generate fresh content. Repeating creates a new scheduled job only after the previous one completes.</p></div></details>
     <div class="preview-box" aria-live="polite"><div class="label">Message preview</div><div id="message-preview" class="preview-text">Your message will appear here as you type.</div></div>
-    <p class="footnote">No destination is selected automatically. Saving an unpaid Facebook setup does not publish now or automatically after subscribing.</p>
+    <p class="footnote">No destination is selected automatically. Saving a Facebook setup keeps it as a plan until you explicitly activate supported publishing.</p>
     <button class="button button-full" type="submit" id="review-button"><svg class="icon" aria-hidden="true"><use href="#ico-check"/></svg> Review post or setup</button>
    </form>
   </section>
@@ -135,7 +138,7 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
     <div class="help"><strong>{% if fb_pages or fb_enabled %}Facebook configured{% else %}Facebook not connected{% endif %}</strong><div class="small">{% if preview_mode %}External publishing is disabled for this free test site.{% elif fb_pages %}{{fb_pages|length}} Page connection(s) available.{% else %}Facebook login requires the service-owned Meta integration.{% endif %}</div></div>
     <a class="button-secondary button-full" href="/pages">Manage Facebook Pages</a>
    </section>
-   <section class="card"><h2>Automations</h2><p><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg> {{plans|length}} saved {{'plan' if plans|length==1 else 'plans'}}. Create or edit yours for free.</p><a class="button-secondary button-full" href="/automations">Manage automation setups</a></section><section class="card"><h2>Autopilot</h2><div class="split"><span class="badge {{ 'good' if settings.enabled and not preview_mode else 'warn' }}">{{'On' if settings.enabled and not preview_mode else 'Not running here'}}</span><span class="small">Owner controls</span></div><p>{% if preview_mode %}You can configure and save automations here, but this preview will not publish anything externally. Your existing live publisher is separate.{% else %}Configure your workflow first, and turn on only supported publishing after payment and explicit approval.{% endif %}</p><a href="/control" class="button-secondary button-full">View settings</a></section>
+   <section class="card"><h2>Automations</h2><p><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg> {{plans|length}} saved {{'plan' if plans|length==1 else 'plans'}}. Create or edit yours for free.</p><a class="button-secondary button-full" href="/automations">Manage automation setups</a></section><section class="card"><h2>Autopilot</h2><div class="split"><span class="badge {{ 'good' if settings.enabled and not preview_mode else 'warn' }}">{{'On' if settings.enabled and not preview_mode else 'Not running here'}}</span><span class="small">Owner controls</span></div><p>{% if preview_mode %}You can configure and save automations here, but this preview will not publish anything externally. Your existing live publisher is separate.{% else %}Prepare your workflow, review its requirements in Settings, and explicitly activate supported publishing when you are ready.{% endif %}</p><a href="/control" class="button-secondary button-full">View settings</a></section>
    <section class="card"><h2>Coming later</h2><p>AI comment replies, Growth Intelligence, media uploads, real-time analytics, and monitored website feeds require verified integrations and additional development.</p><span class="badge">Not active</span></section>
   </aside>
  </div>
@@ -150,7 +153,7 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
     <p>{{p.message}}</p>
     {% if p.topic %}<p class="small"><b>Content guidance:</b> {{p.topic}}</p>{% endif %}
     <small>{{p.frequency.replace('_',' ')|title}} · {{'Selected time ' ~ p.scheduled_at if p.time_type=='at_time' else 'Timing chosen at activation'}} · {{'Review each post' if p.approval=='approve_every_post' else 'Autopilot requested (requires approval)'}}</small>
-    <p class="small">This is an inert configuration record. Connecting a Page or paying does not activate it.</p>
+    <p class="small">Saved plan only. It will not publish until you review and explicitly activate a supported workflow.</p>
    </article>
    {% endfor %}
    </div>
@@ -171,7 +174,7 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
 {% endif %}
    </article>
   {% endfor %}
-  </div>{% else %}<div class="empty"><p style="margin:0">No posts yet. Create a test draft above to see your first result.</p></div>{% endif %}
+  </div>{% else %}<div class="empty"><img class="brand-empty-art" src="/static/brand/empty-posts.svg" width="150" height="96" alt=""><p style="margin:0">No posts yet. Create a test draft above to see your first result.</p></div>{% endif %}
  </section>
 </main>
 </div>
@@ -184,7 +187,7 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
 <div class="modal" id="confirm-modal" hidden role="dialog" aria-modal="true" aria-labelledby="confirm-title">
  <div class="modal-panel">
   <span class="eyebrow">FINAL REVIEW</span><h2 id="confirm-title">Review before saving</h2>
-  <p>Check the destinations and time before you save. Unpaid setup plans cannot publish.</p>
+  <p>Check the destinations and time before you save. Setup plans remain inactive until you explicitly activate supported publishing.</p>
   <div class="preview-box"><div class="label">Your message</div><div class="preview-text" id="confirm-message"></div></div>
   <p><b>Destination:</b> <span id="confirm-targets"></span></p>
   <p><b>Timing:</b> <span id="confirm-time"></span></p>
@@ -221,7 +224,7 @@ form.addEventListener('submit',e=>{
  document.getElementById('confirm-time').textContent=timing;
  document.getElementById('confirm-repeat').textContent=document.getElementById('frequency').selectedOptions[0].text;
  document.getElementById('confirm-warning').textContent = ({{ 'true' if preview_mode or not paid else 'false' }}) ?
- 'Setup-only: You can configure now without paying. This will not publish until you subscribe, connect, and explicitly activate.' :
+ 'Setup only: Your post and timing will be saved as a plan. Review the connection and subscription requirements in Settings before you activate supported publishing.' :
  'Connected destinations can publish at the selected time. Confirm the content carefully.';
  modal.hidden=false;edit.focus();
 });

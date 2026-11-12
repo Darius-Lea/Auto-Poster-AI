@@ -17,25 +17,28 @@ label{display:block;font-size:13px;font-weight:700;margin:16px 0 6px}input,selec
 .notice{display:flex;gap:13px;padding:16px;border:1px solid #667249;background:#29392d;border-radius:15px;margin:21px 0}.notice svg{color:var(--green)}.notice strong{font-size:14px}.notice p{margin:5px 0 0;font-size:12px}
 .plan{border:1px solid #3b5063;border-radius:14px;padding:17px;margin:14px 0;background:#16283c}.split{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.pill{font-size:11px;border-radius:30px;background:#35495d;color:#d6e7f5;padding:6px 10px;font-weight:750}.plan p{margin:7px 0;font-size:13px}.actions{display:flex;gap:8px;margin-top:13px;flex-wrap:wrap}.actions form{margin:0}.actions button{min-height:38px;padding:9px 12px}.empty{border:1px dashed #537086;border-radius:13px;padding:20px;font-size:13px;color:var(--muted);text-align:center}.footer{color:#8fa3b5;font-size:11px;margin-top:28px}
 @media(max-width:800px){.grid{grid-template-columns:1fr}.nav{gap:11px;flex-wrap:wrap}.card{padding:18px}.wrap{padding:16px 15px 70px}.header{align-items:flex-start}.header .brand{font-size:16px}}
-</style></head><body>
+</style><link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png" sizes="180x180">
+<link rel="stylesheet" href="/static/brand/brand.css">
+</head><body>
 {% include "_icons.html" %}
 <div class="wrap">
 <header class="header">
- <div class="brand"><span class="mark"><svg class="icon icon-lg"><use href="#ico-arrow-up-right"/></svg></span>Auto Poster AI</div>
+ <div class="brand"><img class="brand-icon" src="/static/brand/mark.svg" width="40" height="40" alt="">Auto Poster AI</div>
  <nav class="nav" aria-label="Site navigation"><a href="/">Dashboard</a><a href="/pages">Pages</a><a href="/control">Settings</a></nav>
 </header>
-<div class="eyebrow">SET UP BEFORE YOU PAY</div>
+<div class="eyebrow">YOUR CONTENT WORKFLOW</div>
 <h1>Build your automation.</h1>
-<p>Design your content workflow, choose its destination, and save your preferences now. No subscription is needed to plan. Nothing begins publishing until the integration is available, you have active access, and you explicitly activate it.</p>
+<p>Choose what to post, where it should go, and how often. Save your workflow so you can review it before anything goes live.</p>
 <div class="notice" role="status">
  <svg class="icon icon-lg"><use href="#ico-shield"/></svg>
  <div><strong>Planning mode — no live publishing</strong>
- <p>Saved workflows are drafts, not running automations. Even after paying, they must be reviewed and intentionally activated once the relevant connector is ready. {% if preview_mode %}This free Render test server cannot guarantee permanent storage.{% endif %}</p></div>
+ <p>Saved workflows are drafts, not running automations. Review your connections and explicitly activate a supported workflow when you are ready. {% if preview_mode %}This free Render test server cannot guarantee permanent storage.{% endif %}</p></div>
 </div>
 <div class="grid">
 <section class="card" aria-label="Automation plan editor">
 <h2>{{'Edit your setup' if editing else 'New automation plan'}}</h2>
-<p>Use plain language. Your preferences will be saved with this setup, even before you subscribe.</p>
+<p>Use plain language. Tell Auto Poster AI what a useful post looks like for your audience.</p>
 <form method="post" action="/automations">
  <input type="hidden" name="_csrf" value="{{csrf}}">
  {% if editing %}<input type="hidden" name="plan_id" value="{{editing.id}}">{% endif %}
@@ -78,7 +81,7 @@ label{display:block;font-size:13px;font-weight:700;margin:16px 0 6px}input,selec
   <option value="approve_first" {{'selected' if not editing or editing.review_mode=='approve_first'}}>Let me approve every post first</option>
   <option value="autopilot_when_supported" {{'selected' if editing and editing.review_mode=='autopilot_when_supported'}}>Autopilot after I explicitly enable it</option>
  </select>
- <p class="hint">Automatic publishing requires compatible permissions and a paid subscription. This selection is only your future preference.</p>
+ <p class="hint">This saves your approval preference. It does not turn on publishing.</p>
  <button class="button full" type="submit"><svg class="icon"><use href="#ico-check"/></svg>{{'Save changes' if editing else 'Save automation setup'}}</button>
  {% if editing %}<p style="text-align:center"><a href="/automations">Cancel editing</a></p>{% endif %}
 </form>
@@ -100,11 +103,11 @@ label{display:block;font-size:13px;font-weight:700;margin:16px 0 6px}input,selec
   </div>
  </article>
  {% else %}
- <div class="empty"><svg class="icon icon-lg"><use href="#ico-file"/></svg><p>No saved automations yet. Fill out the form to build your first one at no cost.</p></div>
+ <div class="empty"><svg class="icon icon-lg"><use href="#ico-file"/></svg><p>No saved automations yet. Choose your content, destination and timing to create your first workflow.</p></div>
  {% endfor %}
  <div class="notice" style="background:#202c3d;border-color:#3e5970">
   <svg class="icon icon-lg"><use href="#ico-lock"/></svg>
-  <div><strong>How activation will work</strong><p>Connect the relevant accounts, preview content, subscribe to a paid plan, and deliberately activate a supported workflow. Billing alone never starts an automation.</p></div>
+  <div><strong>How activation will work</strong><p>Review your content, connect the relevant accounts, and check the subscription requirements in Settings. You decide when to activate a supported workflow; subscribing alone never starts it.</p></div>
  </div>
 </section>
 </div>
