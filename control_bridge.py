@@ -12,7 +12,7 @@ import sys
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-MODES = {"publish", "publish-and-check", "publish-wanted", "publish-case", "check-status"}
+MODES = {"publish", "publish-and-check", "publish-wanted", "publish-case", "check-status", "catchup"}
 READ_ONLY_MODES = {"preview", "preview-status", "check-facebook"}
 
 
