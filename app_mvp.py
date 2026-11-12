@@ -233,7 +233,7 @@ details>div{padding:0 12px 10px}
 <label for="content">Your post</label>
 <textarea id="content" name="content" required maxlength="10000"
 placeholder="Write about your latest video, a sale, an adoption, a community update, or anything you want to share."></textarea>
-<details id="destinations" open>
+<details id="destinations">
 <summary>＋ Add apps or websites <span id="selected-count" class="pill">1 selected</span></summary>
 <div>
 <label class="dest"><input type="checkbox" name="destinations" value="draft" checked>
