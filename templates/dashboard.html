@@ -64,6 +64,20 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
    <div><div class="eyebrow">YOUR CONTROL CENTER</div><h1>Welcome to Auto Poster AI</h1><p>Plan content, test scheduling, and see which integrations are ready.</p></div>
    <a class="button-secondary" href="/logout">Sign out</a>
   </div>
+  {% if imported %}
+  <div class="banner" role="status"><div><b><svg class="icon" aria-hidden="true"><use href="#ico-check"/></svg> Setup imported into private beta</b><p>Your chosen platforms, content and timing have been saved as an inactive plan. Nothing is publishing. Free preview storage can reset.</p></div><span class="badge good">SETUP SAVED</span></div>
+  {% endif %}
+  <div id="guest-import" class="card" hidden>
+   <div class="split"><h2><svg class="icon" aria-hidden="true"><use href="#ico-file"/></svg> Your free setup is ready to transfer</h2><span class="badge good">NO PAYMENT</span></div>
+   <p>You prepared a post and schedule before signing in. Save them in this private beta dashboard now—publishing will stay off.</p>
+   <div id="guest-summary" class="help"></div>
+   <form method="post" action="/start/import" id="guest-import-form">
+    <input type="hidden" name="_csrf" value="{{csrf}}">
+    <input type="hidden" name="setup_payload" id="guest-payload">
+    <button type="submit" class="button">Save my setup to the dashboard</button>
+   </form>
+   <p class="small">This beta uses a single owner account. Public multi-user accounts are not available yet.</p>
+  </div>
   {% if preview_mode %}
   <div class="banner" role="status"><div><b><svg class="icon" aria-hidden="true"><use href="#ico-shield"/></svg> Free beta: safe preview mode</b><p>Build automation plans, posting schedules and drafts without paying. This free preview cannot publish externally and may lose saved setups after a restart.</p></div><span class="badge">TEST MODE</span></div>
   {% elif payment_required and not paid %}
@@ -125,6 +139,23 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
    <section class="card"><h2>Coming later</h2><p>AI comment replies, Growth Intelligence, media uploads, real-time analytics, and monitored website feeds require verified integrations and additional development.</p><span class="badge">Not active</span></section>
   </aside>
  </div>
+ <section class="card" id="imported-setups">
+  <div class="split"><h2>Prepared setups</h2><span class="badge">{{imported_setups|length}} imported</span></div>
+  {% if imported_setups %}
+   <div class="posts">
+   {% for p in imported_setups %}
+   <article class="post">
+    <div class="split"><b>Post configuration</b><span class="badge warn">Saved · Not active</span></div>
+    <p><b>Platforms:</b> {{p.platforms|join(', ')|title}}</p>
+    <p>{{p.message}}</p>
+    {% if p.topic %}<p class="small"><b>Content guidance:</b> {{p.topic}}</p>{% endif %}
+    <small>{{p.frequency.replace('_',' ')|title}} · {{'Selected time ' ~ p.scheduled_at if p.time_type=='at_time' else 'Timing chosen at activation'}} · {{'Review each post' if p.approval=='approve_every_post' else 'Autopilot requested (requires approval)'}}</small>
+    <p class="small">This is an inert configuration record. Connecting a Page or paying does not activate it.</p>
+   </article>
+   {% endfor %}
+   </div>
+  {% else %}<p class="small">No public-wizard setups have been imported to the owner dashboard. You can <a href="/start">create a setup without logging in</a>, then import it.</p>{% endif %}
+ </section>
  <section class="card" id="posts">
   <div class="split"><h2>Your posts</h2><span class="badge">{{posts|length}} recent</span></div>
   {% if posts %}<div class="posts">
@@ -197,5 +228,23 @@ form.addEventListener('submit',e=>{
 edit.addEventListener('click',()=>{modal.hidden=true;review.focus();});
 confirm.addEventListener('click',()=>{approved=true;modal.hidden=true;form.requestSubmit();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.hidden){modal.hidden=true;review.focus();}});
+const importPanel=document.getElementById('guest-import');
+try {
+ const prepared=JSON.parse(localStorage.getItem('autoposter_public_setup_v1')||'null');
+ if(prepared && Array.isArray(prepared.platforms) && prepared.platforms.length && prepared.message && prepared.setup_key){
+  const importedKey=localStorage.getItem('autoposter_last_imported_setup_key');
+  const justImported={{'true' if imported else 'false'}};
+  if(justImported) localStorage.setItem('autoposter_last_imported_setup_key',prepared.setup_key);
+  if(!justImported && importedKey!==prepared.setup_key){
+   importPanel.hidden=false;
+   document.getElementById('guest-payload').value=JSON.stringify(prepared);
+   document.getElementById('guest-summary').textContent=
+    prepared.platforms.join(', ')+' · '+(prepared.frequency||'once')+
+    ' · '+(prepared.message||'').slice(0,180);
+  }
+ }
+} catch (_) {
+ // Device storage may be disabled; private dashboard still works.
+}
 </script>
 </body></html>
