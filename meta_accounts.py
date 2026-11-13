@@ -288,7 +288,7 @@ def disconnect(workspace_id: str, page_id: str):
 def publish_message(workspace_id: str, page_id: str, message: str):
     import app_control
     from core.facebook import FacebookClient
-    if not app_control.allowed():
+    if not app_control.allowed(workspace_id=workspace_id):
         raise PermissionError("Subscription required before Facebook publishing")
     token = get_page_token(workspace_id, page_id)
     return "meta:" + FacebookClient(page_id, token,

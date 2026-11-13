@@ -161,12 +161,13 @@ textarea{min-height:145px;resize:vertical}
   <div class="alert"><svg class="icon"><use href="#ico-lock"/></svg><span><strong>No account, payment, or external publishing yet.</strong>Your work is currently kept only in this browser on this device. It isn't stored in a customer account and may be lost if browser data is cleared.</span></div>
   <div id="saved-success" class="complete" hidden><svg class="icon icon-lg"><use href="#ico-check"/></svg><span><strong>Setup saved on this device.</strong><small>You can edit it again before registering.</small></span></div>
   <div class="finish-actions">
-   <button type="button" class="btn" id="save-setup"><svg class="icon"><use href="#ico-check"/></svg> Save setup on this device</button>
+   <button type="button" class="btn" id="complete-setup">Continue to your account <svg class="icon"><use href="#ico-arrow-right"/></svg></button>
+   <button type="button" class="btn secondary" id="save-setup"><svg class="icon"><use href="#ico-check"/></svg> Save setup on this device</button>
    <button type="button" class="btn secondary" id="download-setup"><svg class="icon"><use href="#ico-file"/></svg> Download my setup as a backup</button>
    <a class="btn secondary" id="owner-login" href="/login" hidden><svg class="icon"><use href="#ico-lock"/></svg> Continue to private beta dashboard</a>
   </div>
   <p class="caption">Activating supported publishing requires authorized account connections and an active subscription. Review the plan details in Settings before you activate.</p>
-  <p class="caption">Public customer sign-up is still being built. The dashboard currently requires the private beta owner password; it does not give unrelated customers access to each other's data.</p>
+  <p class="caption">Create your account or sign in to save this setup in your own workspace. You will choose your actual connected business Pages before activation.</p>
  </section>
  <div class="actions" id="wizard-actions">
   <button type="button" class="btn secondary" id="back" hidden>Back</button>
@@ -260,6 +261,7 @@ function update(){
  $("scheduled_at").required=$("time_type").value==="at_time";
 }
 function show(step){
+ step=Math.max(1,Math.min(4,Number(step)||1));
  current=step;
  panels.forEach(p=>{p.hidden=Number(p.dataset.step)!==step});
  nav.forEach(n=>{const num=Number(n.dataset.progress);n.classList.toggle("active",num===step);n.classList.toggle("done",num<step)});
@@ -300,7 +302,9 @@ function review(){
 }
 forms.addEventListener("input",()=>{update();persist();$("saved-success").hidden=true;$("owner-login").hidden=true});
 forms.addEventListener("change",()=>{update();persist();$("saved-success").hidden=true;$("owner-login").hidden=true});
-next.addEventListener("click",()=>{if(valid(current)){persist();show(current+1)}});
+function completeSetup(){if(!valid(1)||!valid(2)||!valid(3))return;if(!persist()){error.textContent="This browser blocked saving. Download a backup before continuing.";return;}sessionStorage.setItem("autoposter_finish_setup","1");location.href="/account?next=setup";}
+$("complete-setup").addEventListener("click",completeSetup);
+next.addEventListener("click",()=>{if(current>=4){completeSetup();return;}if(valid(current)){persist();show(current+1)}});
 back.addEventListener("click",()=>show(current-1));
 forms.addEventListener("submit",e=>e.preventDefault());
 $("save-setup").addEventListener("click",()=>{

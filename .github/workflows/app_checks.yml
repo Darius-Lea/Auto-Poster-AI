@@ -6,11 +6,17 @@ on:
     paths:
       - "app_mvp.py"
       - "app_control.py"
+      - "customer_accounts.py"
+      - "creative*.py"
+      - "analytics_workbench.py"
+      - "ai_providers.py"
+      - "editor_connectors.py"
+      - "plan_limits.py"
       - "meta_accounts.py"
       - "automation_setup.py"
       - "public_setup.py"
       - "templates/**"
-      - "static/brand/**"
+      - "static/**"
       - "website/**"
       - "tests/**"
       - "scripts/qa/**"
@@ -20,6 +26,12 @@ on:
     paths:
       - "app_mvp.py"
       - "app_control.py"
+      - "customer_accounts.py"
+      - "creative*.py"
+      - "analytics_workbench.py"
+      - "ai_providers.py"
+      - "editor_connectors.py"
+      - "plan_limits.py"
       - "meta_accounts.py"
       - "tests/test_meta_accounts.py"
       - "tests/test_preview_mode.py"
@@ -32,7 +44,7 @@ on:
       - "templates/_icons.html"
       - "website/index.html"
       - "templates/dashboard.html"
-      - "static/brand/**"
+      - "static/**"
       - "scripts/qa/**"
       - "control_bridge.py"
       - "app_mvp_wsgi.py"
@@ -67,7 +79,9 @@ jobs:
       - name: Check desktop and phone setup screens
         env:
           AUTOPOST_QA_ARTIFACT_DIR: qa-artifacts
-        run: python scripts/qa/brand_setup_smoke.py
+        run: |
+          python scripts/qa/brand_setup_smoke.py
+          python scripts/qa/customer_flow_smoke.py
       - name: Save browser screenshots
         if: always()
         uses: actions/upload-artifact@v4

@@ -1,3 +1,7 @@
+# Customer workbench update — November 13, 2026
+
+The current branch now includes customer registration, isolated workspaces, the fixed fourth-step handoff, explicit Page-specific setup preparation, Basic daily/Page enforcement, creative automation, managed AI fallback, measured reporting and Canva connection code. See [CUSTOMER_BACKEND_2026-11-13.md](CUSTOMER_BACKEND_2026-11-13.md) for exact supported behavior and live-configuration limits. Earlier single-owner notes below describe the earlier release and are historical where superseded.
+
 # Test Auto Poster AI — single-owner web beta
 
 The current web app is on `feature/saas-appstore-foundation-2026-11`. It is separate from the legacy scheduled Fort Wayne publisher on `main`; changing the web app does not establish a change to that publisher or its deployment.

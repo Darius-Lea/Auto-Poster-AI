@@ -57,9 +57,9 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
   <a href="/pages"><svg class="icon" aria-hidden="true"><use href="#ico-plug"/></svg> Facebook Pages</a>
   <a href="/automations"><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg> Build automations</a>
   <a href="/control"><svg class="icon" aria-hidden="true"><use href="#ico-settings"/></svg> Settings</a>
-  <span class="disabled"><svg class="icon" aria-hidden="true"><use href="#ico-chart"/></svg> Insights (upcoming)</span>
+  <a href="/studio">Creative studio</a><a href="/connections">Creative connections</a><a href="/reports">Reports</a>
  </nav>
- <div class="side-footer">PRIVATE BETA<br>This is an owner-only preview, not a customer subscription platform.<p><a href="/logout">Sign out</a></p></div>
+ <div class="side-footer">{% if customer_account %}YOUR WORKSPACE<br>{{customer_account.name}}{% else %}OWNER WORKSPACE<br>Legacy publisher controls{% endif %}<p><a href="/logout">Sign out</a></p></div>
 </aside>
 <main class="main">
  <section id="overview">
@@ -68,18 +68,18 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
    <a class="button-secondary" href="/logout">Sign out</a>
   </div>
   {% if imported %}
-  <div class="banner" role="status"><div><b><svg class="icon" aria-hidden="true"><use href="#ico-check"/></svg> Setup imported into private beta</b><p>Your chosen platforms, content and timing have been saved as an inactive plan. Nothing is publishing. Free preview storage can reset.</p></div><span class="badge good">SETUP SAVED</span></div>
+  <div class="banner" role="status"><div><b><svg class="icon" aria-hidden="true"><use href="#ico-check"/></svg> Setup saved to your workspace</b><p>Your chosen platforms, content and timing have been saved as an inactive plan. Nothing is publishing. Free preview storage can reset.</p></div><span class="badge good">SETUP SAVED</span></div>
   {% endif %}
   <div id="guest-import" class="card" hidden>
    <div class="split"><h2><svg class="icon" aria-hidden="true"><use href="#ico-file"/></svg> Your setup is ready to transfer</h2><span class="badge good">READY TO SAVE</span></div>
-   <p>You prepared a post and schedule before signing in. Save them in this private beta dashboard now—publishing will stay off.</p>
+   <p>You prepared a post and schedule before signing in. Save them in your dashboard now—publishing will stay off.</p>
    <div id="guest-summary" class="help"></div>
    <form method="post" action="/start/import" id="guest-import-form">
     <input type="hidden" name="_csrf" value="{{csrf}}">
     <input type="hidden" name="setup_payload" id="guest-payload">
     <button type="submit" class="button">Save my setup to the dashboard</button>
    </form>
-   <p class="small">This beta uses a single owner account. Public multi-user accounts are not available yet.</p>
+   <p class="small">Your saved setup belongs to this workspace. Review its connected Pages before activating publication.</p>
   </div>
   {% if preview_mode %}
   <div class="banner" role="status"><div><b><svg class="icon" aria-hidden="true"><use href="#ico-shield"/></svg> Free beta: safe preview mode</b><p>Create content, plan your schedule and try the workflow. This preview cannot publish externally and may lose saved setups after a restart.</p></div><span class="badge">TEST MODE</span></div>
@@ -139,7 +139,7 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
     <a class="button-secondary button-full" href="/pages">Manage Facebook Pages</a>
    </section>
    <section class="card"><h2>Automations</h2><p><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg> {{plans|length}} saved {{'plan' if plans|length==1 else 'plans'}}. Create or edit yours for free.</p><a class="button-secondary button-full" href="/automations">Manage automation setups</a></section><section class="card"><h2>Autopilot</h2><div class="split"><span class="badge {{ 'good' if settings.enabled and not preview_mode else 'warn' }}">{{'On' if settings.enabled and not preview_mode else 'Not running here'}}</span><span class="small">Owner controls</span></div><p>{% if preview_mode %}You can configure and save automations here, but this preview will not publish anything externally. Your existing live publisher is separate.{% else %}Prepare your workflow, review its requirements in Settings, and explicitly activate supported publishing when you are ready.{% endif %}</p><a href="/control" class="button-secondary button-full">View settings</a></section>
-   <section class="card"><h2>Coming later</h2><p>AI comment replies, Growth Intelligence, media uploads, real-time analytics, and monitored website feeds require verified integrations and additional development.</p><span class="badge">Not active</span></section>
+   <section class="card"><h2>Your creative workbench</h2><p>Set your voice and location, choose Page-specific automations, draft with managed AI and view measured reports.</p><a class="button button-full" href="/studio">Open creative studio</a><p><a href="/connections">Connect creative tools</a> · <a href="/reports">View reports</a></p></section>
   </aside>
  </div>
  <section class="card" id="imported-setups">
@@ -153,11 +153,12 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
     <p>{{p.message}}</p>
     {% if p.topic %}<p class="small"><b>Content guidance:</b> {{p.topic}}</p>{% endif %}
     <small>{{p.frequency.replace('_',' ')|title}} · {{'Selected time ' ~ p.scheduled_at if p.time_type=='at_time' else 'Timing chosen at activation'}} · {{'Review each post' if p.approval=='approve_every_post' else 'Autopilot requested (requires approval)'}}</small>
-    <p class="small">Saved plan only. It will not publish until you review and explicitly activate a supported workflow.</p>
+    <p class="small">Choose the actual destination and a fresh time. External posts stay inactive until you activate them below.</p>
+<form class="prepare-setup" method="post" action="/setups/{{p.id}}/prepare"><input type="hidden" name="_csrf" value="{{csrf}}"><label>Prepare as<select name="destination"><option value="draft">Internal draft</option><option value="facebook_page">Selected Facebook Pages</option></select></label>{% for page in fb_pages if page.can_publish %}<label><input type="checkbox" name="page_ids" value="{{page.page_id}}"> {{page.name}}</label>{% endfor %}<label>Repeat<select name="frequency"><option value="once">Once</option><option value="daily">Daily — same caption</option><option value="weekly">Weekly — same caption</option></select></label><input name="time_zone" type="hidden" value="UTC"><input name="due_at" type="hidden"><label>Future posting time (your local time)<input type="datetime-local" class="prepare-local-date"></label><button type="submit">Prepare post for review</button></form><p class="small">For a twice-daily source workflow, use the <a href="/studio#automations">automation studio</a> and an eligible plan.</p>
    </article>
    {% endfor %}
    </div>
-  {% else %}<p class="small">No public-wizard setups have been imported to the owner dashboard. You can <a href="/start">create a setup without logging in</a>, then import it.</p>{% endif %}
+  {% else %}<p class="small">No public-wizard setups have been imported to this workspace. You can <a href="/start">create a setup without logging in</a>, then import it.</p>{% endif %}
  </section>
  <section class="card" id="posts">
   <div class="split"><h2>Your posts</h2><span class="badge">{{posts|length}} recent</span></div>
@@ -169,6 +170,7 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
     {% if p.remote_id %}<p class="small">Confirmed delivery: {{p.remote_id}}</p>{% endif %}
     {% if p.error %}<p class="small">Needs attention: {{p.error}}</p>{% endif %}
     {% if p.status in ('scheduled','setup_only') %}<form method="post" action="/cancel/{{p.id}}"><input type="hidden" name="_csrf" value="{{csrf}}"><button type="submit">{{'Remove planned post' if p.status=='setup_only' else 'Cancel scheduled post'}}</button></form>{% endif %}
+{% if p.status in ('setup_only','quota_held') %}<form class="prepare-setup" method="post" action="/posts/{{p.id}}/reschedule"><input type="hidden" name="_csrf" value="{{csrf}}"><input name="due_at" type="hidden"><input name="time_zone" type="hidden"><label>New posting time<input type="datetime-local" class="prepare-local-date" required></label><button type="submit">Save new time for review</button></form>{% endif %}
 {% if p.status=='setup_only' and not preview_mode and paid and p.platform in ('facebook','facebook_page') %}
 <form method="post" action="/activate/{{p.id}}"><input type="hidden" name="_csrf" value="{{csrf}}"><button type="submit" onclick="return confirm('Activate this saved post for its originally selected time?')">Activate this post</button></form>
 {% endif %}
@@ -231,6 +233,7 @@ form.addEventListener('submit',e=>{
 edit.addEventListener('click',()=>{modal.hidden=true;review.focus();});
 confirm.addEventListener('click',()=>{approved=true;modal.hidden=true;form.requestSubmit();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.hidden){modal.hidden=true;review.focus();}});
+for(const f of document.querySelectorAll('.prepare-setup')){const d=f.querySelector('.prepare-local-date'),date=new Date(Date.now()+3600000),pad=n=>String(n).padStart(2,'0');d.value=date.getFullYear()+'-'+pad(date.getMonth()+1)+'-'+pad(date.getDate())+'T'+pad(date.getHours())+':'+pad(date.getMinutes());f.addEventListener('submit',()=>{f.elements.due_at.value=d.value?new Date(d.value).toISOString():'';f.elements.time_zone.value=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';});}
 const importPanel=document.getElementById('guest-import');
 try {
  const prepared=JSON.parse(localStorage.getItem('autoposter_public_setup_v1')||'null');
@@ -241,6 +244,7 @@ try {
   if(!justImported && importedKey!==prepared.setup_key){
    importPanel.hidden=false;
    document.getElementById('guest-payload').value=JSON.stringify(prepared);
+   if(new URLSearchParams(location.search).get('finish_setup')==='1' && sessionStorage.getItem('autoposter_finish_setup')==='1'){sessionStorage.removeItem('autoposter_finish_setup');document.getElementById('guest-import-form').requestSubmit();}
    document.getElementById('guest-summary').textContent=
     prepared.platforms.join(', ')+' · '+(prepared.frequency||'once')+
     ' · '+(prepared.message||'').slice(0,180);

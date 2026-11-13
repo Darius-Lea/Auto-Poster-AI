@@ -48,7 +48,7 @@ def connect():
     return conn
 
 
-def init():
+def init(workspace_id=WORKSPACE):
     with connect() as c:
         c.executescript("""
         CREATE TABLE IF NOT EXISTS subscriptions (
@@ -84,7 +84,7 @@ def init():
           PRIMARY KEY (workspace_id, source)
         );
         """)
-        c.execute("INSERT OR IGNORE INTO publishing_controls(workspace_id) VALUES(?)", (WORKSPACE,))
+        c.execute("INSERT OR IGNORE INTO publishing_controls(workspace_id) VALUES(?)", (workspace_id,))
 
 
 def require_payment() -> bool:
@@ -93,11 +93,11 @@ def require_payment() -> bool:
     return os.getenv("AUTOPOST_REQUIRE_PAYMENT", "false").lower() == "true"
 
 
-def subscription_details(now: int | None = None) -> dict:
+def subscription_details(now: int | None = None, workspace_id=WORKSPACE) -> dict:
     now = int(time.time()) if now is None else now
     with connect() as c:
         row = c.execute(
-            "SELECT * FROM subscriptions WHERE workspace_id=?", (WORKSPACE,)
+            "SELECT * FROM subscriptions WHERE workspace_id=?", (workspace_id,)
         ).fetchone()
     if not row:
         return {"active": False, "plan": "basic", "status": "not_subscribed",
@@ -107,10 +107,10 @@ def subscription_details(now: int | None = None) -> dict:
             "current_period_end": row["current_period_end"]}
 
 
-def allowed(now: int | None = None) -> bool:
+def allowed(now: int | None = None, workspace_id=WORKSPACE) -> bool:
     if not require_payment():
         return True
-    return subscription_details(now)["active"]
+    return subscription_details(now, workspace_id)["active"]
 
 
 def record_subscription_event(event: dict) -> bool:
@@ -127,8 +127,19 @@ def record_subscription_event(event: dict) -> bool:
     obj = event.get("data", {}).get("object", {})
     if not isinstance(obj, dict):
         return False
-    if obj.get("metadata", {}).get("workspace_id") != WORKSPACE:
+    metadata = obj.get("metadata") or {}
+    if not isinstance(metadata, dict):
         return False
+    workspace_id = metadata.get("workspace_id")
+    if not isinstance(workspace_id, str) or len(workspace_id)>128:
+        return False
+    if workspace_id != WORKSPACE:
+        import customer_accounts
+        try:
+            if not customer_accounts.workspace_exists(workspace_id):
+                return False
+        except sqlite3.OperationalError:
+            return False
     subscription_id = obj.get("id")
     if not subscription_id or not str(subscription_id).startswith("sub_"):
         return False
@@ -156,21 +167,22 @@ def record_subscription_event(event: dict) -> bool:
             AND (excluded.subscription_id = subscriptions.subscription_id
                  OR subscriptions.status != 'active'
                  OR subscriptions.current_period_end <= excluded.updated_at)
-        """, (WORKSPACE, obj.get("customer"), subscription_id, status,
+        """, (workspace_id, obj.get("customer"), subscription_id, status,
               "basic", period_end, created, int(time.time())))
     return True
 
 
-def get_settings() -> dict:
+def get_settings(workspace_id=WORKSPACE) -> dict:
     with connect() as c:
         r = c.execute(
-            "SELECT * FROM publishing_controls WHERE workspace_id=?", (WORKSPACE,)
+            "SELECT * FROM publishing_controls WHERE workspace_id=?", (workspace_id,)
         ).fetchone()
     return dict(r) if r else dict(DEFAULTS)
 
 
-def update_settings(values: dict) -> dict:
+def update_settings(values: dict, workspace_id=WORKSPACE) -> dict:
     """Only documented keys may be changed; subscription state is not editable."""
+    init(workspace_id)
     validated = {}
     for key, value in values.items():
         if key not in DEFAULTS:
@@ -197,11 +209,11 @@ def update_settings(values: dict) -> dict:
         with connect() as c:
             c.execute("UPDATE publishing_controls SET " + sql
                       + " WHERE workspace_id=?",
-                      (*validated.values(), WORKSPACE))
-    return get_settings()
+                      (*validated.values(), workspace_id))
+    return get_settings(workspace_id)
 
 
-def claim_run(requested_mode: str, now: int | None = None) -> dict:
+def claim_run(requested_mode: str, now: int | None = None, workspace_id=WORKSPACE) -> dict:
     """Atomic remote schedule gate. A failure to contact this gate fails closed.
 
     Claim before running the old pipeline to avoid overlap. An interrupted
@@ -209,14 +221,14 @@ def claim_run(requested_mode: str, now: int | None = None) -> dict:
     """
     if requested_mode not in ALLOWED_MODES:
         return {"run": False, "reason": "Unsupported publishing mode"}
-    if not allowed(now):
+    if not allowed(now, workspace_id):
         return {"run": False, "reason": "Paid subscription required"}
     now = int(time.time()) if now is None else now
     source = ALLOWED_MODES[requested_mode]
     with connect() as c:
         c.execute("BEGIN IMMEDIATE")
         settings_row = c.execute(
-            "SELECT * FROM publishing_controls WHERE workspace_id=?", (WORKSPACE,)
+            "SELECT * FROM publishing_controls WHERE workspace_id=?", (workspace_id,)
         ).fetchone()
         if not settings_row:
             return {"run": False, "reason": "Control app not initialized"}
@@ -240,7 +252,7 @@ def claim_run(requested_mode: str, now: int | None = None) -> dict:
         interval = s[INTERVAL_KEYS[source]] * 60
         previous = c.execute(
             "SELECT last_claimed_at FROM publishing_claims "
-            "WHERE workspace_id=? AND source=?", (WORKSPACE, source)
+            "WHERE workspace_id=? AND source=?", (workspace_id, source)
         ).fetchone()
         if previous and now - previous["last_claimed_at"] < interval:
             return {"run": False, "reason": "Waiting for next configured interval"}
@@ -249,7 +261,7 @@ def claim_run(requested_mode: str, now: int | None = None) -> dict:
           VALUES(?,?,?)
           ON CONFLICT(workspace_id,source)
           DO UPDATE SET last_claimed_at=excluded.last_claimed_at
-        """, (WORKSPACE, source, now))
+        """, (workspace_id, source, now))
     return {"run": True, "mode": requested_mode,
             "limit": s["max_posts_per_run"], "batch_size": s["batch_size"],
             "release_enabled": bool(s["release_enabled"]), "reason": "Authorized"}

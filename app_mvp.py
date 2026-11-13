@@ -25,14 +25,24 @@ import app_control
 import meta_accounts
 import automation_setup
 import public_setup
+import customer_accounts
+import plan_limits
 
 load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("AUTOPOST_WEB_SECRET") or secrets.token_hex(32)
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax", MAX_CONTENT_LENGTH=64*1024)
 DATABASE = os.getenv("AUTOPOST_WEB_DB", "autopost_web.db")
 PASSWORD = os.getenv("AUTOPOST_APP_PASSWORD")
 LOCK = threading.RLock()
 MAX_POSTS_PER_RUN = 10
+_MAINTENANCE_LOCK = threading.Lock()
+_MAINTENANCE_THREADS = {}
+_MAINTENANCE_LAST = {}
+
+
+def _same_secret(a, b):
+    return isinstance(a,str) and isinstance(b,str) and hmac.compare_digest(a.encode("utf-8"),b.encode("utf-8"))
 
 
 def preview_mode() -> bool:
@@ -83,17 +93,52 @@ def init_db():
             status TEXT NOT NULL DEFAULT 'needs_integration',
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
+        for table in ("app_posts", "app_series", "website_requests"):
+            names = {row[1] for row in c.execute("PRAGMA table_info("+table+")")}
+            if "workspace_id" not in names:
+                c.execute("ALTER TABLE "+table+" ADD COLUMN workspace_id TEXT NOT NULL DEFAULT 'owner'")
+            c.execute("CREATE INDEX IF NOT EXISTS "+table+"_workspace ON "+table+"(workspace_id)")
+    customer_accounts.init()
     app_control.init()
     meta_accounts.init()
     automation_setup.init()
     public_setup.init()
+    plan_limits.init()
+    import creative_jobs, editor_connectors
+    creative_jobs.init()
+    editor_connectors.init()
+    import creative, analytics_workbench
+    creative.init()
+    analytics_workbench.init()
+
+
+def current_workspace():
+    """Resolve workspace from authenticated identity, never a submitted identifier."""
+    if session.get("authorized") is not True:
+        abort(401)
+    if session.get("account_id"):
+        account = customer_accounts.get(session["account_id"])
+        if not account:
+            session.clear()
+            abort(401)
+        return account["workspace_id"]
+    if not PASSWORD:
+        abort(503, "Owner access is not configured")
+    return "owner"
 
 
 def require_login():
-    if not PASSWORD:
-        abort(503, "Set AUTOPOST_APP_PASSWORD before starting the web app.")
-    if session.get("authorized") is not True:
-        abort(401)
+    current_workspace()
+
+
+def is_owner():
+    return current_workspace() == "owner"
+
+
+@app.context_processor
+def account_context():
+    user=customer_accounts.get(session.get("account_id")) if session.get("authorized") else None
+    return {"customer_account":user,"owner_workspace":session.get("authorized") is True and not session.get("account_id"),"workspace_id":user["workspace_id"] if user else "owner"}
 
 
 def valid_due(value):
@@ -120,11 +165,18 @@ def claim_due(now=None, *, drafts_only=False):
     with LOCK:
         with db() as c:
             c.execute("BEGIN IMMEDIATE")
+            filters = ""
+            args = [now.isoformat(timespec="seconds")]
+            if drafts_only:
+                filters += "AND platform='draft' "
+            elif app_control.require_payment():
+                filters += ("AND (platform='draft' OR EXISTS(SELECT 1 FROM subscriptions s "
+                            "WHERE s.workspace_id=app_posts.workspace_id AND s.status='active' "
+                            "AND s.current_period_end>?)) ")
+                args.append(int(now.timestamp()))
             row = c.execute(
                 "SELECT * FROM app_posts WHERE status='scheduled' AND due_at<=? "
-                + ("AND platform='draft' " if drafts_only else "")
-                + "ORDER BY due_at, id LIMIT 1",
-                (now.isoformat(timespec="seconds"),),
+                + filters + "ORDER BY due_at, id LIMIT 1", args,
             ).fetchone()
             if row:
                 c.execute("UPDATE app_posts SET status='sending' WHERE id=?", (row["id"],))
@@ -150,30 +202,35 @@ def run_due(now=None):
     handled = 0
     now = now or datetime.now(timezone.utc)
     for _ in range(MAX_POSTS_PER_RUN):
-        job = claim_due(now, drafts_only=not app_control.allowed())
+        job = claim_due(now)
         if job is None:
             break
         handled += 1
         state, remote, error = "needs_review", None, None
-        if not app_control.allowed() and job["platform"] != "draft":
+        if not app_control.allowed(workspace_id=job["workspace_id"]) and job["platform"] != "draft":
             with db() as c:
                 c.execute("UPDATE app_posts SET status='scheduled' WHERE id=? AND status='sending'", (job["id"],))
             break
         try:
             if preview_mode() and job["platform"] != "draft":
                 state = "needs_connection"
-            elif job["platform"] == "facebook":
+            elif job["platform"] == "facebook" and job["workspace_id"] == "owner":
+                plan_limits.reserve_delivery(job["workspace_id"],job["id"],job["platform"],job["page_id"],now=now)
                 remote = publish_to_facebook(job["content"])
                 state = "published"
             elif job["platform"] == "facebook_page":
+                plan_limits.reserve_delivery(job["workspace_id"],job["id"],job["platform"],job["page_id"],now=now)
                 remote = meta_accounts.publish_message(
-                    meta_accounts.WORKSPACE, job["page_id"], job["content"]
+                    job["workspace_id"], job["page_id"], job["content"]
                 )
                 state = "published"
             elif job["platform"] == "draft":
                 state = "draft_ready"
             else:
                 state = "needs_connection"
+        except plan_limits.PlanLimitError as exc:
+            error=str(exc)[:300]
+            state="quota_held"
         except Exception as exc:
             error = f"{type(exc).__name__}: {str(exc)[:300]}"
             state = "needs_review"
@@ -185,7 +242,7 @@ def run_due(now=None):
             )
             if state in ("published", "draft_ready") and job.get("series_id"):
                 series = c.execute(
-                    "SELECT * FROM app_series WHERE id=? AND active=1", (job["series_id"],)
+                    "SELECT * FROM app_series WHERE id=? AND workspace_id=? AND active=1", (job["series_id"],job["workspace_id"])
                 ).fetchone()
                 if series:
                     next_due = next_recurrence_due(
@@ -193,10 +250,10 @@ def run_due(now=None):
                     )
                     c.execute(
                         "INSERT OR IGNORE INTO app_posts"
-                        "(content,platform,due_at,status,series_id,frequency,page_id)"
-                        " VALUES(?,?,?,'scheduled',?,?,?)",
+                        "(content,platform,due_at,status,series_id,frequency,page_id,workspace_id)"
+                        " VALUES(?,?,?,'scheduled',?,?,?,?)",
                         (series["content"], series["platform"], next_due,
-                         series["id"], series["frequency"], series["page_id"]),
+                         series["id"], series["frequency"], series["page_id"], job["workspace_id"]),
                     )
     return handled
 
@@ -209,12 +266,33 @@ def recover_interrupted():
         )
 
 
+def _maintenance_pass(name, callback, interval):
+    """Keep slow collection/report APIs from blocking the delivery scheduler."""
+    with _MAINTENANCE_LOCK:
+        active=_MAINTENANCE_THREADS.get(name)
+        moment=time.monotonic()
+        if active and active.is_alive() or moment-_MAINTENANCE_LAST.get(name,-interval)<interval:
+            return
+        def run():
+            try:
+                callback()
+            except Exception:
+                app.logger.exception("%s maintenance pass failed",name)
+        thread=threading.Thread(target=run,daemon=True,name='autopost-'+name)
+        _MAINTENANCE_THREADS[name]=thread
+        _MAINTENANCE_LAST[name]=moment
+        thread.start()
+
+
 def worker():
     while True:
         try:
             run_due()
         except Exception:
             app.logger.exception("Scheduler pass failed")
+        import creative_jobs, analytics_workbench
+        _maintenance_pass('creative',creative_jobs.tick,20)
+        _maintenance_pass('analytics',analytics_workbench.tick,60)
         time.sleep(20)
 
 
@@ -469,10 +547,10 @@ def website_requests():
         if len(topic) > 120 or cadence not in ("new", "daily"):
             abort(400, "Invalid website monitoring settings")
         with db() as c:
-            c.execute("INSERT INTO website_requests(url,topic,cadence) VALUES(?,?,?)", (url, topic, cadence))
+            c.execute("INSERT INTO website_requests(url,topic,cadence,workspace_id) VALUES(?,?,?,?)", (url, topic, cadence,current_workspace()))
         return redirect("/website")
     with db() as c:
-        rows = c.execute("SELECT * FROM website_requests ORDER BY id DESC LIMIT 50").fetchall()
+        rows = c.execute("SELECT * FROM website_requests WHERE workspace_id=? ORDER BY id DESC LIMIT 50",(current_workspace(),)).fetchall()
     return render_template_string(WEBSITE_PAGE, requests=rows, csrf=session["csrf"],
                                   preview_mode=preview_mode())
 
@@ -494,8 +572,12 @@ def login():
     if not PASSWORD:
         abort(503, "Configure AUTOPOST_APP_PASSWORD on the server first.")
     if request.method == "POST":
+        try:
+            customer_accounts.attempt("owner-login",request.remote_addr or "local",limit=30)
+        except PermissionError as exc:
+            abort(429,str(exc))
         provided = request.form.get("password", "")
-        if hmac.compare_digest(provided, PASSWORD):
+        if _same_secret(provided, PASSWORD):
             session.clear()
             session["authorized"] = True
             session["csrf"] = secrets.token_urlsafe(32)
@@ -504,15 +586,50 @@ def login():
     return LOGIN
 
 
+@app.route("/account", methods=["GET", "POST"])
+def account():
+    if request.method=="GET" and session.get("authorized") is True:
+        current_workspace()
+        return redirect("/?finish_setup=1" if request.args.get("next")=="setup" else "/")
+    mode=request.form.get("mode",request.args.get("mode","register"))
+    if mode not in ("register","login"):
+        abort(400)
+    if not session.get("csrf"):
+        session["csrf"]=secrets.token_urlsafe(32)
+    next_value="setup" if request.values.get("next")=="setup" else ""
+    error="";status=200
+    email=request.form.get("email","")[:254];name=request.form.get("name","")[:80]
+    if request.method=="POST":
+        if not _same_secret(request.form.get("_csrf",""),session["csrf"]):
+            abort(403,"Refresh the account form and try again.")
+        try:
+            customer_accounts.attempt('account:'+mode,request.remote_addr or 'local')
+            if mode=="register":
+                user=customer_accounts.register(email,request.form.get("password",""),name)
+            else:
+                user=customer_accounts.login(email,request.form.get("password",""))
+                if not user:
+                    raise ValueError("We couldn't sign you in. Check your email and password.")
+            session.clear()
+            session.update(authorized=True,account_id=user["id"],csrf=secrets.token_urlsafe(32))
+            return redirect("/?finish_setup=1" if next_value else "/")
+        except PermissionError as exc:
+            error=str(exc);status=429
+        except ValueError as exc:
+            error=str(exc);status=400
+    return render_template("account.html",mode=mode,error=error,email=email,name=name,next_value=next_value,csrf=session["csrf"]),status
+
+
 @app.route("/logout")
 def logout():
+    customer=bool(session.get("account_id"))
     session.clear()
-    return redirect("/login")
+    return redirect("/account?mode=login" if customer else "/login")
 
 
 @app.before_request
 def protect():
-    if request.endpoint in ("login", "static", "stripe_webhook", "manifest", "app_icon", "legacy_claim", "public_website", "public_onboarding"):
+    if request.endpoint in ("login", "account", "static", "stripe_webhook", "manifest", "app_icon", "legacy_claim", "public_website", "public_onboarding"):
         return
     if (request.endpoint == "home" and request.method == "GET"
             and os.getenv("AUTOPOST_PUBLIC_LANDING", "false").lower() == "true"
@@ -521,8 +638,8 @@ def protect():
     require_login()
     if request.method == "POST":
         # Browser form requests must include a session CSRF token.
-        if not hmac.compare_digest(
-            request.form.get("_csrf", ""), session.get("csrf", "missing")
+        if not _same_secret(
+            request.headers.get("X-CSRF-Token") or request.form.get("_csrf", ""), session.get("csrf", "missing")
         ):
             abort(403)
 
@@ -536,7 +653,7 @@ def import_guest_setup():
     import json
     try:
         payload = json.loads(raw_text)
-        public_setup.import_setup(payload)
+        public_setup.import_setup(payload,workspace_id=current_workspace())
     except (ValueError, TypeError) as exc:
         abort(400, str(exc))
     return redirect("/?imported=1")
@@ -545,20 +662,20 @@ def import_guest_setup():
 @app.route("/")
 def home():
     with db() as c:
-        rows = c.execute("SELECT * FROM app_posts ORDER BY id DESC LIMIT 100").fetchall()
+        rows = c.execute("SELECT * FROM app_posts WHERE workspace_id=? ORDER BY id DESC LIMIT 100",(current_workspace(),)).fetchall()
         counts = {r["status"]: r["n"] for r in c.execute(
-            "SELECT status,COUNT(*) n FROM app_posts GROUP BY status"
+            "SELECT status,COUNT(*) n FROM app_posts WHERE workspace_id=? GROUP BY status",(current_workspace(),)
         )}
-    pages = meta_accounts.list_pages(meta_accounts.WORKSPACE)
+    pages = meta_accounts.list_pages(current_workspace())
     return render_template(
         "dashboard.html", posts=rows, counts=counts, csrf=session["csrf"],
         fb_pages=pages, page_names={p["page_id"]: p["name"] for p in pages},
-        fb_enabled=bool(os.getenv("META_PAGE_ID") and os.getenv("META_PAGE_ACCESS_TOKEN")),
+        fb_enabled=is_owner() and bool(os.getenv("META_PAGE_ID") and os.getenv("META_PAGE_ACCESS_TOKEN")),
         other_apps=("instagram", "tiktok", "youtube", "linkedin", "pinterest", "threads", "x"),
-        payment_required=app_control.require_payment(), paid=app_control.allowed(),
-        preview_mode=preview_mode(), settings=app_control.get_settings(),
-        plans=automation_setup.list_plans(),
-        imported_setups=public_setup.list_setups(),
+        payment_required=app_control.require_payment(), paid=app_control.allowed(workspace_id=current_workspace()),
+        preview_mode=preview_mode(), settings=app_control.get_settings(workspace_id=current_workspace()),
+        plans=automation_setup.list_plans(workspace_id=current_workspace()),
+        imported_setups=public_setup.list_setups(workspace_id=current_workspace()),
         imported=(request.args.get("imported") == "1"),
     )
 
@@ -581,7 +698,7 @@ def selected_destinations(form):
                 or len(url) > 2048):
             raise ValueError("Website URLs must use HTTPS and cannot contain credentials")
     page_ids = list(dict.fromkeys(form.getlist("facebook_pages")))
-    connected = {p["page_id"] for p in meta_accounts.list_pages(meta_accounts.WORKSPACE)
+    connected = {p["page_id"] for p in meta_accounts.list_pages(current_workspace())
                  if p["can_publish"]}
     if any(page_id not in connected for page_id in page_ids):
         raise ValueError("Choose only Facebook Pages you have connected")
@@ -621,7 +738,12 @@ def schedule():
                if when == "now" else valid_due(request.form.get("utc_due")))
     except ValueError as exc:
         abort(400, str(exc))
-    facebook_ready = bool(os.getenv("META_PAGE_ID") and os.getenv("META_PAGE_ACCESS_TOKEN"))
+    facebook_ready = is_owner() and bool(os.getenv("META_PAGE_ID") and os.getenv("META_PAGE_ACCESS_TOKEN"))
+    try:
+        plan_limits.validate_destinations(current_workspace(),targets)
+        plan_limits.check_schedule(current_workspace(),targets,due)
+    except plan_limits.PlanLimitError as exc:
+        abort(exc.status,str(exc))
     with db() as c:
         for platform, website_url, page_id in targets:
             supported = (platform == "draft"
@@ -631,22 +753,22 @@ def schedule():
             # or an integration is later connected. Activation is a separate step.
             if platform == "draft":
                 status = "scheduled"
-            elif preview_mode() or not app_control.allowed():
+            elif preview_mode() or not app_control.allowed(workspace_id=current_workspace()):
                 status = "setup_only"
             else:
                 status = "scheduled" if supported else "needs_connection"
             series_id = None
             if frequency != "once" and (supported or status == "setup_only"):
                 cursor = c.execute(
-                    "INSERT INTO app_series(content,platform,frequency,time_zone,page_id) VALUES(?,?,?,?,?)",
-                    (content, platform, frequency, zone_name, page_id),
+                    "INSERT INTO app_series(content,platform,frequency,time_zone,page_id,workspace_id) VALUES(?,?,?,?,?,?)",
+                    (content, platform, frequency, zone_name, page_id,current_workspace()),
                 )
                 series_id = cursor.lastrowid
             c.execute(
                 "INSERT INTO app_posts"
-                "(content,platform,due_at,status,series_id,frequency,website_url,page_id)"
-                " VALUES(?,?,?,?,?,?,?,?)",
-                (content, platform, due, status, series_id, frequency, website_url,page_id),
+                "(content,platform,due_at,status,series_id,frequency,website_url,page_id,workspace_id)"
+                " VALUES(?,?,?,?,?,?,?,?,?)",
+                (content, platform, due, status, series_id, frequency, website_url,page_id,current_workspace()),
             )
     return redirect("/")
 
@@ -658,24 +780,24 @@ def automations():
         try:
             chosen_id = request.form.get("plan_id", "").strip()
             plan_id = int(chosen_id) if chosen_id else None
-            automation_setup.save(request.form, plan_id=plan_id)
+            automation_setup.save(request.form, workspace_id=current_workspace(),plan_id=plan_id)
         except (ValueError, TypeError) as exc:
             abort(400, str(exc))
         return redirect("/automations")
-    plans = automation_setup.list_plans()
+    plans = automation_setup.list_plans(workspace_id=current_workspace())
     chosen = request.args.get("edit", "", type=str)
     editing = next((p for p in plans if str(p["id"]) == chosen), None)
-    pages = meta_accounts.list_pages(meta_accounts.WORKSPACE)
+    pages = meta_accounts.list_pages(current_workspace())
     return render_template(
         "automations.html", csrf=session["csrf"], plans=plans, editing=editing,
-        pages=pages, preview_mode=preview_mode(), paid=app_control.allowed(),
+        pages=pages, preview_mode=preview_mode(), paid=app_control.allowed(workspace_id=current_workspace()),
         kinds=automation_setup.KINDS,
     )
 
 
 @app.route("/automations/<int:plan_id>/delete", methods=["POST"])
 def automations_delete(plan_id):
-    automation_setup.delete(plan_id)
+    automation_setup.delete(plan_id,workspace_id=current_workspace())
     return redirect("/automations")
 
 
@@ -684,20 +806,20 @@ def activate_saved_post(post_id):
     """A deliberate post-setup action, not an automatic consequence of payment."""
     if preview_mode():
         abort(403, "Publishing is disabled on the free preview")
-    if not app_control.allowed():
+    if not app_control.allowed(workspace_id=current_workspace()):
         abort(402, "Subscribe before activating external publishing")
     now = datetime.now(timezone.utc)
     with db() as c:
         c.execute("BEGIN IMMEDIATE")
-        row = c.execute("SELECT * FROM app_posts WHERE id=?", (post_id,)).fetchone()
+        row = c.execute("SELECT * FROM app_posts WHERE id=? AND workspace_id=?", (post_id,current_workspace())).fetchone()
         if not row or row["status"] != "setup_only":
             abort(404, "No unpublished setup plan found")
         if row["platform"] == "facebook":
-            if not (os.getenv("META_PAGE_ID") and os.getenv("META_PAGE_ACCESS_TOKEN")):
+            if not is_owner() or not (os.getenv("META_PAGE_ID") and os.getenv("META_PAGE_ACCESS_TOKEN")):
                 abort(409, "Connect the Facebook Page before activation")
         elif row["platform"] == "facebook_page":
             try:
-                meta_accounts.get_page_token(meta_accounts.WORKSPACE, row["page_id"])
+                meta_accounts.get_page_token(current_workspace(), row["page_id"])
             except (PermissionError, ValueError):
                 abort(409, "Reconnect the selected Page before activation")
         else:
@@ -707,22 +829,27 @@ def activate_saved_post(post_id):
         due = datetime.fromisoformat(row["due_at"])
         if due <= now:
             abort(409, "This posting time has passed. Create a new schedule to activate.")
-        c.execute("UPDATE app_posts SET status='scheduled' WHERE id=? AND status='setup_only'",
-                  (post_id,))
+        try:
+            plan_limits.check_schedule(current_workspace(),[(row["platform"],row["website_url"],row["page_id"])],row["due_at"],exclude_post_ids=[post_id])
+        except plan_limits.PlanLimitError as exc:
+            abort(exc.status,str(exc))
+        c.execute("UPDATE app_posts SET status='scheduled' WHERE id=? AND workspace_id=? AND status='setup_only'",
+                  (post_id,current_workspace()))
     return redirect("/#posts")
 
 
 @app.route("/cancel/<int:post_id>", methods=["POST"])
 def cancel(post_id):
+    workspace_id=current_workspace()
     with db() as c:
-        post = c.execute("SELECT series_id FROM app_posts WHERE id=?", (post_id,)).fetchone()
-        if post and post["series_id"]:
-            c.execute("UPDATE app_series SET active=0 WHERE id=?", (post["series_id"],))
-            c.execute("UPDATE app_posts SET status='cancelled' "
-                      "WHERE series_id=? AND status IN ('scheduled','setup_only')", (post["series_id"],))
+        post=c.execute("SELECT series_id FROM app_posts WHERE id=? AND workspace_id=?",(post_id,workspace_id)).fetchone()
+        if not post:
+            abort(404,"Post not found")
+        if post["series_id"]:
+            c.execute("UPDATE app_series SET active=0 WHERE id=? AND workspace_id=?",(post["series_id"],workspace_id))
+            c.execute("UPDATE app_posts SET status='cancelled' WHERE series_id=? AND workspace_id=? AND status IN ('scheduled','setup_only')",(post["series_id"],workspace_id))
         else:
-            c.execute("UPDATE app_posts SET status='cancelled' "
-                      "WHERE id=? AND status IN ('scheduled','setup_only')", (post_id,))
+            c.execute("UPDATE app_posts SET status='cancelled' WHERE id=? AND workspace_id=? AND status IN ('scheduled','setup_only')",(post_id,workspace_id))
     return redirect("/")
 
 
@@ -757,10 +884,10 @@ input[type=checkbox]{width:21px;height:21px;accent-color:#c8f98a}
 {% endif %}
 <p><small>Facebook grants access only to eligible Pages. Some Pages may need additional permission or to be reauthorized. Connection alone never starts automatic posting.</small></p></section>
 {% if pending %}
-<section class="card"><h2>Choose where Auto Poster AI may publish</h2>
+<section class="card"><h2>Choose where Auto Poster AI may publish</h2>{% if basic_limits.basic %}<p>Basic includes one Facebook Page. Choose one below. To switch Pages later, disconnect the current Page first.</p>{% endif %}
 <form method="post" action="/facebook/activate"><input type="hidden" name="_csrf" value="{{csrf}}">
 {% for p in pending %}
-<div class="item"><input type="checkbox" id="p{{p.page_id}}" name="page_ids" value="{{p.page_id}}" {{'disabled' if not p.can_publish}}>
+<div class="item"><input type="{{'radio' if basic_limits.basic else 'checkbox'}}" id="p{{p.page_id}}" name="page_ids" value="{{p.page_id}}" {{'disabled' if not p.can_publish}}>
 <label for="p{{p.page_id}}"><b>{{p.name}}</b><small>{{'Eligible to publish' if p.can_publish else 'No permission to publish on this Page'}}</small></label></div>
 {% endfor %}
 <button type="submit">Connect selected Pages</button>
@@ -774,9 +901,9 @@ input[type=checkbox]{width:21px;height:21px;accent-color:#c8f98a}
 <button class="remove" type="submit">Disconnect</button></form></div>
 {% else %}<p>No Facebook business Pages connected through sign-in yet.</p>{% endfor %}
 </section>
-<section class="card"><h2>Already using a Page token?</h2>
+{% if owner_workspace %}<section class="card"><h2>Already using a Page token?</h2>
 <p>Your existing single-owner Facebook publishing setup is separate and remains unchanged. This sign-in feature is the future customer path, not a replacement of your working Page credentials.</p>
-</section>
+</section>{% endif %}
 </main></body></html>
 """
 
@@ -784,9 +911,9 @@ input[type=checkbox]{width:21px;height:21px;accent-color:#c8f98a}
 @app.route("/pages")
 def pages_overview():
     return render_template_string(
-        PAGES_PAGE, csrf=session["csrf"], configured=(meta_accounts.configured() and not preview_mode()),
-        pending=meta_accounts.pending_choices(meta_accounts.WORKSPACE),
-        pages=meta_accounts.list_pages(meta_accounts.WORKSPACE),
+        PAGES_PAGE, csrf=session["csrf"], owner_workspace=is_owner(), basic_limits=plan_limits.limits(current_workspace()), configured=(meta_accounts.configured() and not preview_mode()),
+        pending=meta_accounts.pending_choices(current_workspace()),
+        pages=meta_accounts.list_pages(current_workspace()),
     )
 
 
@@ -799,15 +926,19 @@ def facebook_connect():
     state = secrets.token_urlsafe(40)
     session["fb_oauth_state"] = state
     session["fb_oauth_started"] = int(time.time())
+    session["fb_oauth_workspace"] = current_workspace()
     return redirect(meta_accounts.login_url(state), code=302)
 
 
 @app.route("/facebook/callback")
 def facebook_callback():
+    oauth_workspace=session.pop("fb_oauth_workspace",None)
+    if oauth_workspace!=current_workspace():
+        abort(403,"Facebook connection belongs to another workspace")
     expected = session.pop("fb_oauth_state", None)
     started = session.pop("fb_oauth_started", 0)
     supplied = request.args.get("state", "")
-    if (not expected or not hmac.compare_digest(expected, supplied)
+    if (not expected or not _same_secret(expected, supplied)
             or int(time.time()) - int(started) > 600):
         abort(403, "Invalid or expired Facebook connection")
     if request.args.get("error"):
@@ -815,7 +946,7 @@ def facebook_callback():
     code = request.args.get("code", "")
     try:
         available = meta_accounts.discover_pages(code)
-        meta_accounts.remember_pending(meta_accounts.WORKSPACE, available)
+        meta_accounts.remember_pending(current_workspace(), available)
     except (RuntimeError, ValueError) as exc:
         app.logger.warning("Facebook connection failed: %s", str(exc))
         abort(502, "Unable to retrieve Facebook Pages. Please try reconnecting.")
@@ -826,7 +957,10 @@ def facebook_callback():
 def facebook_activate():
     page_ids = request.form.getlist("page_ids")
     try:
-        meta_accounts.activate_pages(meta_accounts.WORKSPACE, page_ids)
+        plan_limits.validate_pages(current_workspace(),page_ids)
+        meta_accounts.activate_pages(current_workspace(), page_ids)
+    except plan_limits.PlanLimitError as exc:
+        abort(exc.status,str(exc))
     except (ValueError, PermissionError) as exc:
         abort(400, str(exc))
     return redirect("/pages")
@@ -835,20 +969,20 @@ def facebook_activate():
 @app.route("/facebook/disconnect/<page_id>", methods=["POST"])
 def facebook_disconnect(page_id):
     try:
-        removed = meta_accounts.disconnect(meta_accounts.WORKSPACE, page_id)
+        removed = meta_accounts.disconnect(current_workspace(), page_id)
     except ValueError as exc:
         abort(400, str(exc))
     if removed:
         with db() as c:
             c.execute("""
                 UPDATE app_posts SET status='needs_connection'
-                WHERE platform='facebook_page' AND page_id=?
+                WHERE platform='facebook_page' AND page_id=? AND workspace_id=?
                   AND status='scheduled'
-            """, (page_id,))
+            """, (page_id,current_workspace()))
             c.execute("""
                 UPDATE app_series SET active=0
-                WHERE platform='facebook_page' AND page_id=?
-            """, (page_id,))
+                WHERE platform='facebook_page' AND page_id=? AND workspace_id=?
+            """, (page_id,current_workspace()))
     return redirect("/pages")
 
 
@@ -962,19 +1096,19 @@ def control_center():
     if request.method == "POST":
         fields = {k: request.form.get(k, 0) for k in app_control.DEFAULTS}
         try:
-            app_control.update_settings(fields)
+            app_control.update_settings(fields,workspace_id=current_workspace())
         except ValueError as exc:
             abort(400, str(exc))
         return redirect("/control")
-    billing = app_control.subscription_details()
+    billing = app_control.subscription_details(workspace_id=current_workspace())
     expires = (datetime.fromtimestamp(billing["current_period_end"], timezone.utc).date()
                if billing["current_period_end"] else None)
     return render_template_string(
-        CONTROL_PAGE, csrf=session["csrf"], settings=app_control.get_settings(),
+        CONTROL_PAGE, csrf=session["csrf"], settings=app_control.get_settings(workspace_id=current_workspace()),
         billing=billing, expires=expires,
         paid=billing["active"], payment_required=app_control.require_payment(),
-        facebook_ready=bool(os.getenv("META_PAGE_ID") and os.getenv("META_PAGE_ACCESS_TOKEN")),
-        bridge_ready=bool(os.getenv("AUTOPOST_WORKER_TOKEN")),
+        facebook_ready=is_owner() and bool(os.getenv("META_PAGE_ID") and os.getenv("META_PAGE_ACCESS_TOKEN")),
+        bridge_ready=is_owner() and bool(os.getenv("AUTOPOST_WORKER_TOKEN")),
         preview_mode=preview_mode(),
     )
 
@@ -983,7 +1117,7 @@ def control_center():
 def legacy_claim():
     required = os.getenv("AUTOPOST_WORKER_TOKEN", "")
     supplied = request.headers.get("Authorization", "")
-    if len(required) < 32 or not hmac.compare_digest(supplied, "Bearer " + required):
+    if len(required) < 32 or not _same_secret(supplied, "Bearer " + required):
         abort(401)
     data = request.get_json(silent=True) or {}
     result = app_control.claim_run(str(data.get("mode", "")))
@@ -1003,8 +1137,8 @@ def start_checkout():
     stripe.api_key = key
     checkout = stripe.checkout.Session.create(
         mode="subscription", line_items=[{"price": price, "quantity": 1}],
-        client_reference_id=app_control.WORKSPACE,
-        subscription_data={"metadata": {"workspace_id": app_control.WORKSPACE}},
+        client_reference_id=current_workspace(),
+        subscription_data={"metadata": {"workspace_id": current_workspace()}},
         success_url=origin + "/control", cancel_url=origin + "/control",
     )
     return redirect(checkout.url, code=303)
@@ -1019,7 +1153,7 @@ def subscription_portal():
     with app_control.connect() as c:
         row = c.execute(
             "SELECT customer_id FROM subscriptions WHERE workspace_id=?",
-            (app_control.WORKSPACE,)
+            (current_workspace(),)
         ).fetchone()
     if not row or not row["customer_id"] or not key or not origin.startswith("https://"):
         abort(503, "Billing portal is not configured")
@@ -1045,6 +1179,10 @@ def stripe_webhook():
         abort(400)
     app_control.record_subscription_event(dict(event))
     return jsonify({"received": True})
+
+
+from creative import creative_bp
+app.register_blueprint(creative_bp)
 
 
 def start():
