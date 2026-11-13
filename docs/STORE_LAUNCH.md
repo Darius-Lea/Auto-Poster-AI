@@ -1,3 +1,7 @@
+# Current web release boundary
+
+Customer accounts, recovery, verification and account export/deletion now have implementation and offline coverage. They still need deployment/security/device validation. This does not create signed iOS/Android binaries or store approval. Before store submission, satisfy the live checks in [MARKET_READINESS_2026-11-13.md](MARKET_READINESS_2026-11-13.md); older roadmap descriptions below are historical where superseded.
+
 # Auto Poster AI — Apple and Google launch preparation
 
 The requested next distribution targets are **Apple App Store and Google Play**. The current deliverable is a mobile-friendly web application with install icons and a web manifest. It is not a signed iOS or Android application and has not been submitted to either store.

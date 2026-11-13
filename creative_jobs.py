@@ -369,6 +369,8 @@ def _eligible(automation):
         raise ValueError("This preview can save automations but cannot run source collection or publishing")
     if not app_control.allowed(workspace_id=automation["workspace_id"]):
         raise ValueError("Activate your subscription before running an automation")
+    if app_control.publishing_paused(automation["workspace_id"]):
+        raise ValueError("Publishing is paused for this workspace. Resume it in Settings before running an automation.")
     ids = json.loads(automation["page_ids_json"])
     if not ids:
         raise ValueError("Connect and select at least one Facebook Page before activation")

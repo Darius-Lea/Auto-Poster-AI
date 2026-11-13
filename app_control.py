@@ -7,6 +7,7 @@ the GitHub Actions bridge consult this same server-side state.
 from __future__ import annotations
 
 import os
+import secrets
 import sqlite3
 import time
 from urllib.parse import urlparse
@@ -84,6 +85,15 @@ def init(workspace_id=WORKSPACE):
           PRIMARY KEY (workspace_id, source)
         );
         """)
+        c.executescript("""
+        CREATE TABLE IF NOT EXISTS publishing_pauses (
+          workspace_id TEXT PRIMARY KEY,paused INTEGER NOT NULL DEFAULT 0,
+          updated_at INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS billing_checkout_attempts (
+          workspace_id TEXT PRIMARY KEY,plan TEXT NOT NULL,price_id TEXT NOT NULL,
+          idempotency_key TEXT NOT NULL,created_at INTEGER NOT NULL,
+          expires_at INTEGER NOT NULL,session_id TEXT,session_url TEXT);
+        """)
         c.execute("INSERT OR IGNORE INTO publishing_controls(workspace_id) VALUES(?)", (workspace_id,))
 
 
@@ -143,13 +153,29 @@ def record_subscription_event(event: dict) -> bool:
     subscription_id = obj.get("id")
     if not subscription_id or not str(subscription_id).startswith("sub_"):
         return False
-    created = int(event.get("created", 0))
+    try:
+        created = int(event.get("created", 0))
+    except (ValueError,TypeError,OverflowError):
+        return False
     # Stripe 2025-03-31.basil and newer moved billing periods to items.
     # Fail closed rather than guessing if the paid period is unavailable.
-    items = obj.get("items", {}).get("data", []) or []
-    ends = [int(item.get("current_period_end") or 0) for item in items]
-    period_end = min(ends) if ends else int(obj.get("current_period_end", 0) or 0)
+    container=obj.get("items") or {}
+    if not isinstance(container,dict):return False
+    items=container.get("data",[]) or []
+    if not isinstance(items,list) or any(not isinstance(item,dict) for item in items):return False
+    try:
+        ends = [int(item.get("current_period_end") or 0) for item in items]
+        period_end = min(ends) if ends else int(obj.get("current_period_end", 0) or 0)
+    except (ValueError,TypeError,OverflowError):
+        return False
     status = str(obj.get("status", "unknown"))
+    configured = {entry["price_id"]: name for name,entry in billing_plans().items() if entry["configured"]}
+    item_prices = [item.get("price", {}) for item in items if isinstance(item,dict)]
+    price_ids = [price.get("id") if isinstance(price,dict) else price for price in item_prices]
+    recognized = {configured[price_id] for price_id in price_ids if price_id in configured}
+    # Only a service-configured price can grant a higher tier. Client-selected
+    # metadata, an unrecognized price and legacy fixture events remain Basic.
+    plan = next(iter(recognized)) if len(recognized)==1 and len(price_ids)==1 else "basic"
     with connect() as c:
         # event_created prevents an older webhook delivery from reactivating
         # an expired or canceled subscription.
@@ -163,12 +189,15 @@ def record_subscription_event(event: dict) -> bool:
             subscription_id=excluded.subscription_id,status=excluded.status,
             plan=excluded.plan,current_period_end=excluded.current_period_end,
             event_created=excluded.event_created,updated_at=excluded.updated_at
-          WHERE excluded.event_created >= subscriptions.event_created
+          WHERE (excluded.event_created > subscriptions.event_created
+            OR (excluded.event_created = subscriptions.event_created
+                AND CASE excluded.status WHEN 'canceled' THEN 4 WHEN 'incomplete_expired' THEN 4 WHEN 'unpaid' THEN 3 WHEN 'past_due' THEN 2 ELSE 1 END
+                  > CASE subscriptions.status WHEN 'canceled' THEN 4 WHEN 'incomplete_expired' THEN 4 WHEN 'unpaid' THEN 3 WHEN 'past_due' THEN 2 ELSE 1 END))
             AND (excluded.subscription_id = subscriptions.subscription_id
                  OR subscriptions.status != 'active'
                  OR subscriptions.current_period_end <= excluded.updated_at)
         """, (workspace_id, obj.get("customer"), subscription_id, status,
-              "basic", period_end, created, int(time.time())))
+              plan, period_end, created, int(time.time())))
     return True
 
 
@@ -223,6 +252,8 @@ def claim_run(requested_mode: str, now: int | None = None, workspace_id=WORKSPAC
         return {"run": False, "reason": "Unsupported publishing mode"}
     if not allowed(now, workspace_id):
         return {"run": False, "reason": "Paid subscription required"}
+    if publishing_paused(workspace_id):
+        return {"run": False, "reason": "Publishing paused in this workspace"}
     now = int(time.time()) if now is None else now
     source = ALLOWED_MODES[requested_mode]
     with connect() as c:
@@ -265,3 +296,73 @@ def claim_run(requested_mode: str, now: int | None = None, workspace_id=WORKSPAC
     return {"run": True, "mode": requested_mode,
             "limit": s["max_posts_per_run"], "batch_size": s["batch_size"],
             "release_enabled": bool(s["release_enabled"]), "reason": "Authorized"}
+
+
+# This is deliberately separate from the legacy source-control `enabled` flag:
+# no existing owner schedule is silently paused by the migration.
+def publishing_paused(workspace_id=WORKSPACE):
+    with connect() as c:
+        try:
+            row=c.execute("SELECT paused FROM publishing_pauses WHERE workspace_id=?",(workspace_id,)).fetchone()
+        except sqlite3.OperationalError:
+            return False
+    return bool(row and row["paused"])
+
+
+def set_publishing_paused(workspace_id,paused):
+    if not isinstance(workspace_id,str) or not workspace_id or len(workspace_id)>128 or type(paused) is not bool:
+        raise ValueError("Choose whether to pause or resume publishing.")
+    init(workspace_id)
+    with connect() as c:
+        c.execute("INSERT INTO publishing_pauses VALUES(?,?,?) ON CONFLICT(workspace_id) DO UPDATE SET paused=excluded.paused,updated_at=excluded.updated_at",(workspace_id,int(paused),int(time.time())))
+    return paused
+
+
+def billing_plans():
+    labels={"basic":"Basic","creator":"Creator","business":"Business","agency":"Agency"}
+    result={name:{"label":label,"configured":False,"price_id":os.getenv("STRIPE_"+name.upper()+"_PRICE_ID","").strip()} for name,label in labels.items()}
+    prices=[entry['price_id'] for entry in result.values() if entry['price_id']]
+    for entry in result.values():
+        price=entry['price_id']
+        entry['configured']=bool(price.startswith('price_') and len(price)<=200 and not any(c.isspace() for c in price) and prices.count(price)==1)
+    return result
+
+
+def public_origin():
+    raw=os.getenv("AUTOPOST_PUBLIC_URL","").strip()
+    try:
+        value=urlparse(raw)
+        if any(c.isspace() for c in raw) or value.scheme!="https" or not value.hostname or value.username or value.password or value.query or value.fragment or value.path not in ("","/") or not value.port is None and not 1<=value.port<=65535:
+            raise ValueError
+    except (ValueError,TypeError):
+        raise ValueError("Subscription setup is not ready. Please try again later.") from None
+    return raw.rstrip("/")
+
+
+def checkout_attempt(workspace_id,plan,now=None):
+    moment=int(time.time()) if now is None else int(now)
+    plans=billing_plans()
+    if plan not in plans or not plans[plan]["configured"]:
+        raise ValueError("That plan is not available for activation yet.")
+    price=plans[plan]["price_id"]
+    if not price.startswith("price_") or len(price)>200 or any(x.isspace() for x in price):
+        raise ValueError("That plan is not available for activation yet.")
+    init(workspace_id)
+    with connect() as c:
+        c.execute("BEGIN IMMEDIATE")
+        existing=c.execute("SELECT * FROM billing_checkout_attempts WHERE workspace_id=?",(workspace_id,)).fetchone()
+        if existing and existing["expires_at"]>moment:
+            if existing["plan"]!=plan or existing["price_id"]!=price:
+                raise ValueError("A checkout is already open. Finish or let it expire before choosing another plan.")
+            return dict(existing)
+        key="autopost-checkout-"+secrets.token_hex(24)
+        c.execute("INSERT OR REPLACE INTO billing_checkout_attempts VALUES(?,?,?,?,?,?,NULL,NULL)",(workspace_id,plan,price,key,moment,moment+1860))
+        return dict(c.execute("SELECT * FROM billing_checkout_attempts WHERE workspace_id=?",(workspace_id,)).fetchone())
+
+
+def save_checkout(workspace_id,idempotency_key,session_id,session_url):
+    u=urlparse(session_url or "")
+    if u.scheme!="https" or u.hostname!="checkout.stripe.com" or u.username or u.password:
+        raise ValueError("The payment service did not return a valid checkout. Please try again.")
+    with connect() as c:
+        c.execute("UPDATE billing_checkout_attempts SET session_id=?,session_url=? WHERE workspace_id=? AND idempotency_key=?",(session_id,session_url,workspace_id,idempotency_key))

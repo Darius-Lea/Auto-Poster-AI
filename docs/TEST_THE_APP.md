@@ -1,3 +1,7 @@
+# Novice readiness review — November 13, 2026
+
+The latest release adds an idea-first marketing plan, seven-draft handoff and reviewed week scheduling, working publishing pause, safer checkout/webhooks, account recovery/verification/export/deletion and caption autosave. The full audit and remaining public-launch blockers are in [MARKET_READINESS_2026-11-13.md](MARKET_READINESS_2026-11-13.md). Passing offline tests does not establish live Render, Meta, Stripe or email readiness. Older notes below are historical where superseded.
+
 # Customer workbench update — November 13, 2026
 
 The current branch now includes customer registration, isolated workspaces, the fixed fourth-step handoff, explicit Page-specific setup preparation, Basic daily/Page enforcement, creative automation, managed AI fallback, measured reporting and Canva connection code. See [CUSTOMER_BACKEND_2026-11-13.md](CUSTOMER_BACKEND_2026-11-13.md) for exact supported behavior and live-configuration limits. Earlier single-owner notes below describe the earlier release and are historical where superseded.

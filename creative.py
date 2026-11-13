@@ -14,7 +14,7 @@ def connect():
 
 def init():
     with connect() as c:
-        c.executescript('CREATE TABLE IF NOT EXISTS creative_suggestions(id INTEGER PRIMARY KEY,workspace_id TEXT NOT NULL,text TEXT NOT NULL,provider TEXT NOT NULL,created INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS creative_usage(workspace_id TEXT NOT NULL,day TEXT NOT NULL,count INTEGER NOT NULL,PRIMARY KEY(workspace_id,day));')
+        c.executescript('CREATE TABLE IF NOT EXISTS creative_suggestions(id INTEGER PRIMARY KEY,workspace_id TEXT NOT NULL,text TEXT NOT NULL,provider TEXT NOT NULL,created INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS creative_usage(workspace_id TEXT NOT NULL,day TEXT NOT NULL,count INTEGER NOT NULL,PRIMARY KEY(workspace_id,day)); CREATE TABLE IF NOT EXISTS creative_working_drafts(workspace_id TEXT PRIMARY KEY,content TEXT NOT NULL,revision INTEGER NOT NULL,saved_at INTEGER NOT NULL);')
 
 def context():
     import app_control,meta_accounts,ai_providers,editor_connectors,creative_jobs,plan_limits
@@ -31,7 +31,30 @@ def fail(exc,target='/studio'):
 
 @creative_bp.route('/studio')
 def studio():
-    return render_template('studio.html',**context())
+    c=context();initial='';identifier=request.args.get('draft_id','')
+    if identifier:
+        if not identifier.isdigit():abort(404)
+        with connect() as connection:row=connection.execute('SELECT content FROM app_posts WHERE id=? AND workspace_id=?',(int(identifier),c['workspace'])).fetchone()
+        if not row:abort(404)
+        initial=row['content']
+    return render_template('studio.html',initial_content=initial,source_draft_id=identifier,**c)
+
+@creative_bp.route('/studio/draft',methods=['GET','POST'])
+def working_draft():
+    ws=actor();init()
+    if request.method=='GET':
+        with connect() as c:row=c.execute('SELECT content,revision,saved_at FROM creative_working_drafts WHERE workspace_id=?',(ws,)).fetchone()
+        return jsonify(dict(row) if row else {'content':'','revision':0,'saved_at':None})
+    text=request.form.get('content','')
+    try:revision=int(request.form.get('revision','-1'))
+    except (ValueError,TypeError):return jsonify(error='Refresh this draft before saving.'),400
+    if revision<0 or not isinstance(text,str) or len(text)>10000:return jsonify(error='Keep your draft under 10,000 characters.'),400
+    with connect() as c:
+        c.execute('BEGIN IMMEDIATE');row=c.execute('SELECT revision FROM creative_working_drafts WHERE workspace_id=?',(ws,)).fetchone()
+        current=row['revision'] if row else 0
+        if current!=revision:return jsonify(error='This draft changed in another tab. Your text is still here; copy it before reloading.'),409
+        c.execute('INSERT INTO creative_working_drafts VALUES(?,?,?,?) ON CONFLICT(workspace_id) DO UPDATE SET content=excluded.content,revision=excluded.revision,saved_at=excluded.saved_at',(ws,text,revision+1,int(time.time())))
+    return jsonify(revision=revision+1,message='Draft saved to your workspace. Nothing is scheduled.')
 
 @creative_bp.route('/studio/profile',methods=['POST'])
 def profile_save():

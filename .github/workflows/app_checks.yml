@@ -7,6 +7,10 @@ on:
       - "app_mvp.py"
       - "app_control.py"
       - "customer_accounts.py"
+      - "account_support.py"
+      - "launch.py"
+      - "business_help.py"
+      - "service_readiness.py"
       - "creative*.py"
       - "analytics_workbench.py"
       - "ai_providers.py"
@@ -27,6 +31,10 @@ on:
       - "app_mvp.py"
       - "app_control.py"
       - "customer_accounts.py"
+      - "account_support.py"
+      - "launch.py"
+      - "business_help.py"
+      - "service_readiness.py"
       - "creative*.py"
       - "analytics_workbench.py"
       - "ai_providers.py"
@@ -82,6 +90,7 @@ jobs:
         run: |
           python scripts/qa/brand_setup_smoke.py
           python scripts/qa/customer_flow_smoke.py
+          python scripts/qa/novice_launch_smoke.py
       - name: Save browser screenshots
         if: always()
         uses: actions/upload-artifact@v4

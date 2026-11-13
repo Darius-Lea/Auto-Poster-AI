@@ -16,6 +16,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
+from werkzeug.exceptions import Unauthorized
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -110,6 +111,8 @@ def init_db():
     import creative, analytics_workbench
     creative.init()
     analytics_workbench.init()
+    import launch
+    launch.init()
 
 
 def current_workspace():
@@ -118,7 +121,7 @@ def current_workspace():
         abort(401)
     if session.get("account_id"):
         account = customer_accounts.get(session["account_id"])
-        if not account:
+        if not account or int(session.get("auth_version",0)) != int(account.get("auth_version",0)):
             session.clear()
             abort(401)
         return account["workspace_id"]
@@ -138,6 +141,8 @@ def is_owner():
 @app.context_processor
 def account_context():
     user=customer_accounts.get(session.get("account_id")) if session.get("authorized") else None
+    if user and int(session.get("auth_version",0)) != int(user.get("auth_version",0)):
+        user=None
     return {"customer_account":user,"owner_workspace":session.get("authorized") is True and not session.get("account_id"),"workspace_id":user["workspace_id"] if user else "owner"}
 
 
@@ -165,7 +170,9 @@ def claim_due(now=None, *, drafts_only=False):
     with LOCK:
         with db() as c:
             c.execute("BEGIN IMMEDIATE")
-            filters = ""
+            filters = ("AND (platform='draft' OR NOT EXISTS(SELECT 1 FROM publishing_pauses p "
+                       "WHERE p.workspace_id=app_posts.workspace_id AND p.paused=1)) "
+                       "AND (platform='draft' OR workspace_id='owner' OR EXISTS(SELECT 1 FROM customer_accounts a WHERE a.workspace_id=app_posts.workspace_id AND a.email_verified=1)) ")
             args = [now.isoformat(timespec="seconds")]
             if drafts_only:
                 filters += "AND platform='draft' "
@@ -176,7 +183,7 @@ def claim_due(now=None, *, drafts_only=False):
                 args.append(int(now.timestamp()))
             row = c.execute(
                 "SELECT * FROM app_posts WHERE status='scheduled' AND due_at<=? "
-                + filters + "ORDER BY due_at, id LIMIT 1", args,
+                + filters + "ORDER BY CASE WHEN platform='draft' THEN 1 ELSE 0 END, due_at, id LIMIT 1", args,
             ).fetchone()
             if row:
                 c.execute("UPDATE app_posts SET status='sending' WHERE id=?", (row["id"],))
@@ -211,6 +218,10 @@ def run_due(now=None):
             with db() as c:
                 c.execute("UPDATE app_posts SET status='scheduled' WHERE id=? AND status='sending'", (job["id"],))
             break
+        if job["platform"] != "draft" and app_control.publishing_paused(job["workspace_id"]):
+            with db() as c:
+                c.execute("UPDATE app_posts SET status='scheduled' WHERE id=? AND status='sending'",(job["id"],))
+            continue
         try:
             if preview_mode() and job["platform"] != "draft":
                 state = "needs_connection"
@@ -586,17 +597,21 @@ def login():
     return LOGIN
 
 
+ACCOUNT_DESTINATIONS={"setup":"/?finish_setup=1","launch":"/launch","pages":"/pages","studio":"/studio","connections":"/connections","reports":"/reports","settings":"/account/settings"}
+
+
 @app.route("/account", methods=["GET", "POST"])
 def account():
     if request.method=="GET" and session.get("authorized") is True:
-        current_workspace()
-        return redirect("/?finish_setup=1" if request.args.get("next")=="setup" else "/")
+        try:current_workspace()
+        except Unauthorized:pass
+        else:return redirect(ACCOUNT_DESTINATIONS.get(request.args.get('next'),'/'))
     mode=request.form.get("mode",request.args.get("mode","register"))
     if mode not in ("register","login"):
         abort(400)
     if not session.get("csrf"):
         session["csrf"]=secrets.token_urlsafe(32)
-    next_value="setup" if request.values.get("next")=="setup" else ""
+    next_value=request.values.get("next","") if request.values.get("next") in ACCOUNT_DESTINATIONS else ""
     error="";status=200
     email=request.form.get("email","")[:254];name=request.form.get("name","")[:80]
     if request.method=="POST":
@@ -611,8 +626,8 @@ def account():
                 if not user:
                     raise ValueError("We couldn't sign you in. Check your email and password.")
             session.clear()
-            session.update(authorized=True,account_id=user["id"],csrf=secrets.token_urlsafe(32))
-            return redirect("/?finish_setup=1" if next_value else "/")
+            session.update(authorized=True,account_id=user["id"],auth_version=user.get("auth_version",0),csrf=secrets.token_urlsafe(32))
+            return redirect(ACCOUNT_DESTINATIONS.get(next_value,"/"))
         except PermissionError as exc:
             error=str(exc);status=429
         except ValueError as exc:
@@ -629,19 +644,31 @@ def logout():
 
 @app.before_request
 def protect():
-    if request.endpoint in ("login", "account", "static", "stripe_webhook", "manifest", "app_icon", "legacy_claim", "public_website", "public_onboarding"):
+    if request.endpoint in ("login", "account", "static", "stripe_webhook", "manifest", "app_icon", "legacy_claim", "public_website", "public_onboarding", "launch.begin", "launch.build", "launch.export_plan", "account_support.forgot_password", "account_support.reset_password", "account_support.verify_email", "help.guide", "help.privacy", "help.terms"):
         return
     if (request.endpoint == "home" and request.method == "GET"
             and os.getenv("AUTOPOST_PUBLIC_LANDING", "false").lower() == "true"
             and session.get("authorized") is not True):
         return redirect("/welcome")
-    require_login()
+    try:require_login()
+    except Unauthorized:
+        if request.method=='GET' and 'text/html' in request.headers.get('Accept','').lower() and not request.path.startswith('/api/'):
+            destination=next((name for name in ('pages','studio','connections','reports') if request.path=='/'+name or request.path.startswith('/'+name+'/')),'settings' if request.path.startswith('/account/') or request.path=='/control' else '')
+            return redirect('/account?mode=login'+('&next='+destination if destination else ''))
+        raise
     if request.method == "POST":
         # Browser form requests must include a session CSRF token.
         if not _same_secret(
             request.headers.get("X-CSRF-Token") or request.form.get("_csrf", ""), session.get("csrf", "missing")
         ):
             abort(403)
+
+
+    if session.get('account_id') and request.endpoint in ('facebook_connect','facebook_activate','start_checkout','activate_saved_post','creative.canva_connect'):
+        customer=customer_accounts.get(session['account_id'])
+        if not customer or not customer.get('email_verified'):
+            flash('Verify your email in Account settings before connecting accounts or activating paid publishing.')
+            return redirect('/account/settings')
 
 
 @app.route("/start/import", methods=["POST"])
@@ -674,6 +701,7 @@ def home():
         other_apps=("instagram", "tiktok", "youtube", "linkedin", "pinterest", "threads", "x"),
         payment_required=app_control.require_payment(), paid=app_control.allowed(workspace_id=current_workspace()),
         preview_mode=preview_mode(), settings=app_control.get_settings(workspace_id=current_workspace()),
+        publishing_paused=app_control.publishing_paused(current_workspace()),
         plans=automation_setup.list_plans(workspace_id=current_workspace()),
         imported_setups=public_setup.list_setups(workspace_id=current_workspace()),
         imported=(request.args.get("imported") == "1"),
@@ -712,6 +740,15 @@ def selected_destinations(form):
 
 @app.route("/schedule", methods=["POST"])
 def schedule():
+    if not is_owner():
+        try:
+            customer_accounts.attempt('schedule',current_workspace(),limit=60,window=300)
+        except PermissionError as exc:
+            abort(429,str(exc))
+    with db() as c:
+        pending=c.execute("SELECT count(*) FROM app_posts WHERE workspace_id=? AND platform='draft' AND status='scheduled'",(current_workspace(),)).fetchone()[0]
+    if pending>=100:
+        abort(429,"You have 100 drafts waiting to be processed. Let them finish before adding more.")
     # Building plans and drafts is free. Live delivery requires server-side
     # entitlement AND explicit subsequent activation after setup.
     # Setup-only posts never auto-activate on a payment webhook.
@@ -775,6 +812,10 @@ def schedule():
 
 @app.route("/automations", methods=["GET", "POST"])
 def automations():
+    if not is_owner():
+        if request.method=='POST':flash('Use the creative studio to save and start your automation.')
+        return redirect('/studio#automations')
+
     """Pre-pay planning area; no automation setup route starts a worker."""
     if request.method == "POST":
         try:
@@ -1011,36 +1052,40 @@ button.secondary{background:#2f4050;color:white}
 @media(max-width:390px){.grid{grid-template-columns:1fr}}
 </style></head><body><main>
 <p><a href="/">← Back to composer</a></p>
-<h1>Autopilot controls</h1>
+<h1>Publishing and subscription</h1>
+{% for message in get_flashed_messages() %}<p role="status">{{message}}</p>{% endfor %}
+<section class="card"><div class="row"><h2>Your publishing</h2><span class="pill">{{'Paused' if publishing_paused else 'Ready'}}</span></div>
+<p>{{'Scheduled posts and automations stay saved, but new external publishing is paused.' if publishing_paused else 'Your approved schedules can run when their connections and subscription are ready.'}} A request already in flight may finish.</p>
+<form method="post" action="/publishing/pause"><input type="hidden" name="_csrf" value="{{csrf}}"><input type="hidden" name="paused" value="{{'0' if publishing_paused else '1'}}"><button>{{'Resume publishing' if publishing_paused else 'Pause all publishing'}}</button></form></section>
 {% if preview_mode %}
 <p class="warn" style="padding:12px;border-radius:10px">Free test site: these settings are for exploring only. They do not control your live Facebook publisher.</p>
 {% else %}
-<p>Change how your existing automated Facebook publishing workflow runs. These are live control settings once GitHub Actions is connected to this hosted app.</p>{% endif %}
+<p>Manage your publishing and subscription here. {% if owner_workspace %}Legacy source controls apply once your GitHub Actions bridge is connected.{% endif %}</p>{% endif %}
 <section class="card">
 <div class="row"><h2>Subscription</h2><span class="pill {{' ' if paid else 'warn'}}">{{'Active' if paid else 'Inactive'}}</span></div>
 {% if preview_mode %}<p><b>Free beta preview</b> · No billing or checkout here.</p>
 <p>The commercial subscription service is not connected yet. A payment cannot be made from this test site.</p>
-{% else %}<p><b>Basic · $10.99/month</b></p>
+{% else %}<p><b>{{billing.plan|title}}</b></p>
 <p>{{billing.status.replace('_',' ')|title}}{% if billing.current_period_end %} · Paid access until {{expires}} UTC{% endif %}</p>
-{% if not paid %}
-<form method="post" action="/billing/checkout">
-<input name="_csrf" type="hidden" value="{{csrf}}">
-<button type="submit">Subscribe for $10.99 / month</button></form>
+{% if not has_subscription %}
+{% if checkout_configured %}<form method="post" action="/billing/checkout">
+<input name="_csrf" type="hidden" value="{{csrf}}"><label for="plan">Choose a subscription</label><select id="plan" name="plan">{% for name,item in billing_plans.items() if item.configured %}<option value="{{name}}">{{item.label}}</option>{% endfor %}</select>
+<button type="submit">See price and activate subscription</button></form>{% else %}<p>Subscription activation is not available on this service yet. Your saved work stays available.</p>{% endif %}
 {% else %}
 <form method="post" action="/billing/portal">
 <input name="_csrf" type="hidden" value="{{csrf}}">
 <button class="secondary" type="submit">Manage or cancel subscription</button></form>
 {% endif %}
-<small>Checkout requires Stripe configuration on the hosted server. iOS App Store billing will need StoreKit integration and Apple review.</small>{% endif %}
+<small>You review the exact price and renewal terms in checkout before confirming. Subscribing never activates a saved post automatically.</small>{% endif %}
 </section>
-<section class="card">
-<h2>Publishing controls</h2>
+{% if owner_workspace %}<section class="card">
+<h2>Legacy owner source controls</h2>
 {% if preview_mode %}<p>These specialized rules are shown for development testing only. They are not linked to your existing Facebook Page.</p>{% endif %}
 <details><summary>Show advanced source controls</summary>
 {% if not paid and payment_required %}<p>Settings can be saved, but the service will not publish while unpaid.</p>{% endif %}
 <form method="post" action="/control">
 <input type="hidden" name="_csrf" value="{{csrf}}">
-<div class="row item"><label for="enabled"><b>Autopilot</b><small>Pause or resume all scheduled publishing</small></label>
+<div class="row item"><label for="enabled"><b>Legacy source runner</b><small>Allow or pause the separate connected GitHub source workflow</small></label>
 <input id="enabled" name="enabled" type="checkbox" value="1" {{'checked' if settings.enabled}}></div>
 {% for name,label,sub in [
 ('booking','Booking photos','Existing Allen County records'),
@@ -1067,7 +1112,7 @@ button.secondary{background:#2f4050;color:white}
 <p>Existing Facebook Page: <b>{{'Credential configured' if facebook_ready else 'Not connected'}}</b></p>
 <p>GitHub Actions control bridge: <b>{{'Server token configured' if bridge_ready else 'Not configured'}}</b></p>
 <small>A token configured on the server does not prove that the GitHub workflow has been connected. Until deployment and wiring are complete, changing these controls does not change the existing GitHub scheduled runs.</small>
-</section>
+</section>{% endif %}
 </main></body></html>
 """
 
@@ -1093,6 +1138,9 @@ def app_icon():
 
 @app.route("/control", methods=["GET", "POST"])
 def control_center():
+    if request.method == "POST" and not is_owner():
+        flash('Use the publishing pause button to control your workspace.')
+        return redirect('/control')
     if request.method == "POST":
         fields = {k: request.form.get(k, 0) for k in app_control.DEFAULTS}
         try:
@@ -1109,8 +1157,20 @@ def control_center():
         paid=billing["active"], payment_required=app_control.require_payment(),
         facebook_ready=is_owner() and bool(os.getenv("META_PAGE_ID") and os.getenv("META_PAGE_ACCESS_TOKEN")),
         bridge_ready=is_owner() and bool(os.getenv("AUTOPOST_WORKER_TOKEN")),
-        preview_mode=preview_mode(),
+        preview_mode=preview_mode(),owner_workspace=is_owner(),
+        publishing_paused=app_control.publishing_paused(current_workspace()),
+        billing_plans=app_control.billing_plans(),checkout_configured=_checkout_ready(),
+        public_sales_ready=_public_sales_ready(),has_subscription=billing["status"] not in ("not_subscribed","canceled","incomplete_expired"),
     )
+
+
+@app.route("/publishing/pause",methods=["POST"])
+def pause_publishing():
+    choice=request.form.get('paused')
+    if choice not in ('0','1'):abort(400,'Choose pause or resume.')
+    app_control.set_publishing_paused(current_workspace(),choice=='1')
+    flash('Publishing paused. Your drafts and schedules are saved.' if choice=='1' else 'Publishing resumed. Existing approved schedules can run.')
+    return redirect('/control')
 
 
 @app.route("/internal/legacy/claim", methods=["POST"])
@@ -1124,24 +1184,52 @@ def legacy_claim():
     return jsonify(result)
 
 
+def _public_sales_ready():
+    import service_readiness
+    state=service_readiness.configured()
+    return state.get('public_sales_enabled') is True and state.get('configuration_complete') is True
+
+
+def _checkout_ready():
+    if not is_owner() and not _public_sales_ready():return False
+    try:
+        app_control.public_origin()
+        return bool(os.getenv('STRIPE_SECRET_KEY')) and any(p['configured'] for p in app_control.billing_plans().values())
+    except ValueError:
+        return False
+
+
 @app.route("/billing/checkout", methods=["POST"])
 def start_checkout():
     if preview_mode():
         abort(403, "Checkout is disabled in free preview mode")
-    price = os.getenv("STRIPE_BASIC_PRICE_ID")
-    key = os.getenv("STRIPE_SECRET_KEY")
-    origin = os.getenv("AUTOPOST_PUBLIC_URL", "").rstrip("/")
-    if not key or not price or not origin.startswith("https://"):
-        abort(503, "Configure Stripe and the HTTPS app URL to enable checkout")
+    workspace=current_workspace()
+    if not is_owner() and not _public_sales_ready():
+        abort(409,'Subscription activation is not available on this service yet. Your drafts are safe.')
+    with app_control.connect() as c:
+        existing=c.execute("SELECT * FROM subscriptions WHERE workspace_id=?",(workspace,)).fetchone()
+    if existing and existing['status'] not in ('canceled','incomplete_expired'):
+        flash('You already have a subscription record. Manage it below instead of opening a second subscription.')
+        return redirect('/control')
     import stripe
-    stripe.api_key = key
-    checkout = stripe.checkout.Session.create(
-        mode="subscription", line_items=[{"price": price, "quantity": 1}],
-        client_reference_id=current_workspace(),
-        subscription_data={"metadata": {"workspace_id": current_workspace()}},
-        success_url=origin + "/control", cancel_url=origin + "/control",
-    )
-    return redirect(checkout.url, code=303)
+    try:
+        origin=app_control.public_origin()
+        if not os.getenv('STRIPE_SECRET_KEY'):raise ValueError('Subscription activation is not available yet.')
+        attempt=app_control.checkout_attempt(workspace,request.form.get('plan','basic'))
+        if attempt.get('session_url'):return redirect(attempt['session_url'],code=303)
+        stripe.api_key=os.getenv('STRIPE_SECRET_KEY')
+        options=dict(mode='subscription',line_items=[{'price':attempt['price_id'],'quantity':1}],
+            client_reference_id=workspace,subscription_data={'metadata':{'workspace_id':workspace,'plan':attempt['plan']}},
+            success_url=origin+'/control',cancel_url=origin+'/control',expires_at=attempt['expires_at'],
+            idempotency_key=attempt['idempotency_key'])
+        if existing and existing['customer_id']:options['customer']=existing['customer_id']
+        checkout=stripe.checkout.Session.create(**options)
+        app_control.save_checkout(workspace,attempt['idempotency_key'],checkout.id,checkout.url)
+        return redirect(checkout.url,code=303)
+    except ValueError as exc:
+        flash(str(exc));return redirect('/control')
+    except stripe.StripeError:
+        flash('The payment service is temporarily unavailable. Please retry this same checkout later.');return redirect('/control')
 
 
 @app.route("/billing/portal", methods=["POST"])
@@ -1149,7 +1237,9 @@ def subscription_portal():
     if preview_mode():
         abort(403, "Billing is disabled in free preview mode")
     key = os.getenv("STRIPE_SECRET_KEY")
-    origin = os.getenv("AUTOPOST_PUBLIC_URL", "").rstrip("/")
+    try:origin=app_control.public_origin()
+    except ValueError:
+        flash('Subscription management is not available yet.');return redirect('/control')
     with app_control.connect() as c:
         row = c.execute(
             "SELECT customer_id FROM subscriptions WHERE workspace_id=?",
@@ -1159,10 +1249,11 @@ def subscription_portal():
         abort(503, "Billing portal is not configured")
     import stripe
     stripe.api_key = key
-    portal = stripe.billing_portal.Session.create(
-        customer=row["customer_id"], return_url=origin + "/control"
-    )
-    return redirect(portal.url, code=303)
+    try:
+        portal = stripe.billing_portal.Session.create(customer=row["customer_id"], return_url=origin + "/control")
+        return redirect(portal.url, code=303)
+    except stripe.StripeError:
+        flash('Subscription management is temporarily unavailable. Please try again later.');return redirect('/control')
 
 
 @app.route("/billing/webhook", methods=["POST"])
@@ -1183,6 +1274,12 @@ def stripe_webhook():
 
 from creative import creative_bp
 app.register_blueprint(creative_bp)
+from launch import launch_bp
+app.register_blueprint(launch_bp)
+from account_support import account_support_bp
+app.register_blueprint(account_support_bp)
+from business_help import help_bp
+app.register_blueprint(help_bp)
 
 
 def start():

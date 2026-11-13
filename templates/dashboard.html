@@ -55,8 +55,8 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
   <a href="#create"><svg class="icon" aria-hidden="true"><use href="#ico-pencil"/></svg> Create a post</a>
   <a href="#posts"><svg class="icon" aria-hidden="true"><use href="#ico-calendar"/></svg> Your posts</a>
   <a href="/pages"><svg class="icon" aria-hidden="true"><use href="#ico-plug"/></svg> Facebook Pages</a>
-  <a href="/automations"><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg> Build automations</a>
-  <a href="/control"><svg class="icon" aria-hidden="true"><use href="#ico-settings"/></svg> Settings</a>
+  <a href="{{ '/automations' if owner_workspace else '/studio#automations' }}"><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg> Build automations</a>
+  <a href="{{ '/control' if owner_workspace else '/account/settings' }}"><svg class="icon" aria-hidden="true"><use href="#ico-settings"/></svg> Settings</a>
   <a href="/studio">Creative studio</a><a href="/connections">Creative connections</a><a href="/reports">Reports</a>
  </nav>
  <div class="side-footer">{% if customer_account %}YOUR WORKSPACE<br>{{customer_account.name}}{% else %}OWNER WORKSPACE<br>Legacy publisher controls{% endif %}<p><a href="/logout">Sign out</a></p></div>
@@ -64,9 +64,10 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
 <main class="main">
  <section id="overview">
   <div class="topline">
-   <div><div class="eyebrow">YOUR CONTROL CENTER</div><h1>Welcome to Auto Poster AI</h1><p>Plan content, test scheduling, and see which integrations are ready.</p></div>
+   <div><div class="eyebrow">YOUR CONTROL CENTER</div><h1>Welcome to Auto Poster AI</h1><p>Prepare one useful post, choose your Page, and review it before publishing.</p></div>
    <a class="button-secondary" href="/logout">Sign out</a>
   </div>
+  <p><a class="button" href="/launch">Only have a business idea? Build my first plan</a></p>
   {% if imported %}
   <div class="banner" role="status"><div><b><svg class="icon" aria-hidden="true"><use href="#ico-check"/></svg> Setup saved to your workspace</b><p>Your chosen platforms, content and timing have been saved as an inactive plan. Nothing is publishing. Free preview storage can reset.</p></div><span class="badge good">SETUP SAVED</span></div>
   {% endif %}
@@ -96,10 +97,10 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
  <p>Set your preferred content, Pages and timing now. Saving a plan does not start publishing.</p>
  <ol class="steps">
   <li><span class="number">1</span><span><b>Choose your destination</b><small><a href="/pages">View Facebook Pages</a>, or plan for a Facebook Page you will connect later.</small></span></li>
-  <li><span class="number">2</span><span><b>Build an automation</b><small>Choose content, source, frequency and approval. <a href="/automations">Create a free setup</a>.</small></span></li>
+  <li><span class="number">2</span><span><b>Build an automation</b><small>Choose content, source, frequency and approval. <a href="{{ '/automations' if owner_workspace else '/studio#automations' }}">Create a free setup</a>.</small></span></li>
   <li><span class="number">3</span><span><b>Prepare a post</b><small>Save a draft or future posting plan below. You remain in control of activation.</small></span></li>
  </ol>
- <div style="margin-top:18px"><a class="button" href="/automations"><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg> Set up an automation for free</a></div>
+ <div style="margin-top:18px"><a class="button" href="{{ '/automations' if owner_workspace else '/studio#automations' }}"><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg> Set up an automation for free</a></div>
  </section>
  </section>
  <div class="content-grid">
@@ -138,7 +139,7 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
     <div class="help"><strong>{% if fb_pages or fb_enabled %}Facebook configured{% else %}Facebook not connected{% endif %}</strong><div class="small">{% if preview_mode %}External publishing is disabled for this free test site.{% elif fb_pages %}{{fb_pages|length}} Page connection(s) available.{% else %}Facebook login requires the service-owned Meta integration.{% endif %}</div></div>
     <a class="button-secondary button-full" href="/pages">Manage Facebook Pages</a>
    </section>
-   <section class="card"><h2>Automations</h2><p><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg> {{plans|length}} saved {{'plan' if plans|length==1 else 'plans'}}. Create or edit yours for free.</p><a class="button-secondary button-full" href="/automations">Manage automation setups</a></section><section class="card"><h2>Autopilot</h2><div class="split"><span class="badge {{ 'good' if settings.enabled and not preview_mode else 'warn' }}">{{'On' if settings.enabled and not preview_mode else 'Not running here'}}</span><span class="small">Owner controls</span></div><p>{% if preview_mode %}You can configure and save automations here, but this preview will not publish anything externally. Your existing live publisher is separate.{% else %}Prepare your workflow, review its requirements in Settings, and explicitly activate supported publishing when you are ready.{% endif %}</p><a href="/control" class="button-secondary button-full">View settings</a></section>
+   <section class="card"><h2>Automations</h2><p><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg> {{plans|length}} saved {{'plan' if plans|length==1 else 'plans'}}. Create or edit yours for free.</p><a class="button-secondary button-full" href="{{ '/automations' if owner_workspace else '/studio#automations' }}">Manage automation setups</a></section><section class="card"><h2>Autopilot</h2><div class="split"><span class="badge {{ 'good' if not publishing_paused and not preview_mode else 'warn' }}">{{'Preview only' if preview_mode else 'Paused' if publishing_paused else 'Ready for approved schedules'}}</span><span class="small">{{'Owner controls' if owner_workspace else 'Publishing preferences'}}</span></div><p>{% if preview_mode %}You can configure and save automations here, but this preview will not publish anything externally. Your existing live publisher is separate.{% else %}Prepare your workflow, review its requirements in Settings, and explicitly activate supported publishing when you are ready.{% endif %}</p><a href="/control" class="button-secondary button-full">Publishing and pause controls</a></section>
    <section class="card"><h2>Your creative workbench</h2><p>Set your voice and location, choose Page-specific automations, draft with managed AI and view measured reports.</p><a class="button button-full" href="/studio">Open creative studio</a><p><a href="/connections">Connect creative tools</a> · <a href="/reports">View reports</a></p></section>
   </aside>
  </div>
@@ -166,7 +167,7 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
   {% for p in posts %}
    <article class="post">
     <div class="split"><b>{{page_names.get(p.page_id, 'Facebook Page') if p.platform=='facebook_page' else 'Draft' if p.platform=='draft' else 'Facebook Page' if p.platform=='facebook' else p.platform|title}}</b><span class="badge {{'good' if p.status in ('published','draft_ready') else 'warn' if p.status in ('needs_review','needs_connection','setup_only') else ''}}">{{'Saved setup · not publishing' if p.status=='setup_only' else p.status.replace('_',' ')|title}}</span></div>
-    <p>{{p.content}}</p><small>Planned: <time datetime="{{p.due_at}}">{{p.due_at}} UTC</time> · {{p.frequency}}</small>
+    <p>{{p.content}}</p>{% if p.status=='draft_ready' %}<p><a class="button-secondary" href="/studio?draft_id={{p.id}}">Use this draft</a></p>{% endif %}{% if p.status=='needs_review' %}<p class="help">Check your Facebook Page before retrying: a lost response may still mean the post was published. <a href="/pages">Check the Page connection</a> · <a href="/help">Get help with this delivery</a></p>{% endif %}<small>Planned: <time datetime="{{p.due_at}}">{{p.due_at}} UTC</time> · {{p.frequency}}</small>
     {% if p.remote_id %}<p class="small">Confirmed delivery: {{p.remote_id}}</p>{% endif %}
     {% if p.error %}<p class="small">Needs attention: {{p.error}}</p>{% endif %}
     {% if p.status in ('scheduled','setup_only') %}<form method="post" action="/cancel/{{p.id}}"><input type="hidden" name="_csrf" value="{{csrf}}"><button type="submit">{{'Remove planned post' if p.status=='setup_only' else 'Cancel scheduled post'}}</button></form>{% endif %}
@@ -180,11 +181,12 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
  </section>
 </main>
 </div>
+<footer class="small" style="max-width:1100px;margin:12px auto 88px;padding:0 20px" aria-label="Help and account"><a href="/help">Help</a> · <a href="/account/settings">My account</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></footer>
 <nav class="mobile-nav" aria-label="Mobile navigation">
  <a href="#overview"><svg class="icon" aria-hidden="true"><use href="#ico-grid"/></svg>Home</a>
  <a href="#create"><svg class="icon" aria-hidden="true"><use href="#ico-pencil"/></svg>Create</a>
  <a href="#posts"><svg class="icon" aria-hidden="true"><use href="#ico-calendar"/></svg>Posts</a>
- <a href="/automations"><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg>Automate</a><a href="/control"><svg class="icon" aria-hidden="true"><use href="#ico-settings"/></svg>Settings</a>
+ <a href="{{ '/automations' if owner_workspace else '/studio#automations' }}"><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg>Automate</a><a href="{{'/control' if owner_workspace else '/account/settings'}}"><svg class="icon" aria-hidden="true"><use href="#ico-settings"/></svg>Settings</a>
 </nav>
 <div class="modal" id="confirm-modal" hidden role="dialog" aria-modal="true" aria-labelledby="confirm-title">
  <div class="modal-panel">

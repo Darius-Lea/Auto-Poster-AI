@@ -77,6 +77,7 @@ textarea{min-height:145px;resize:vertical}
  <div class="eyebrow">FREE SETUP · NO ACCOUNT REQUIRED TO START</div>
  <h1>Your next post. <span>Planned your way.</span></h1>
  <p>Choose your channels, create a post, and decide when it should appear. Review everything before you save.</p>
+ <p><a class="btn secondary" href="/launch">Only have a business idea? Build my first plan</a></p>
 </section>
 <nav class="steps" id="step-nav" aria-label="Setup progress">
  <div class="step active" data-progress="1"><span>1</span>Platforms</div>
@@ -90,11 +91,11 @@ textarea{min-height:145px;resize:vertical}
  <section class="panel" data-step="1">
   <div class="eyebrow">STEP 01 / 04</div>
   <h2>Where do you want to post?</h2>
-  <p>Select as many platforms as you want. We'll keep each destination in your setup so you can connect the right account later.</p>
+  <p>Facebook Page text publishing is supported after connection and activation. Other platforms below save future preferences only; they cannot publish from this app yet.</p>
   <div class="platform-grid">
   {% for name,description,mark,key in [
     ('Facebook Pages','Page selection after connecting','f','facebook'),
-    ('Instagram','Business or creator account','IG','instagram'),
+    ('Instagram','Publishing connector planned','IG','instagram'),
     ('TikTok','Publishing connector planned','Tk','tiktok'),
     ('YouTube','Video publishing planned','YT','youtube'),
     ('LinkedIn','Professional publishing planned','in','linkedin'),
@@ -132,8 +133,8 @@ textarea{min-height:145px;resize:vertical}
   <select id="frequency">
    <option value="once">Just once</option>
    <option value="daily">Once a day</option>
-   <option value="twice_daily">Twice a day</option>
-   <option value="three_daily">Three times a day</option>
+   <option value="twice_daily">Twice a day — higher-plan preference</option>
+   <option value="three_daily">Three times a day — higher-plan preference</option>
    <option value="weekly">Once a week</option>
   </select>
   <label class="field" for="time_type">First posting time</label>
@@ -164,7 +165,7 @@ textarea{min-height:145px;resize:vertical}
    <button type="button" class="btn" id="complete-setup">Continue to your account <svg class="icon"><use href="#ico-arrow-right"/></svg></button>
    <button type="button" class="btn secondary" id="save-setup"><svg class="icon"><use href="#ico-check"/></svg> Save setup on this device</button>
    <button type="button" class="btn secondary" id="download-setup"><svg class="icon"><use href="#ico-file"/></svg> Download my setup as a backup</button>
-   <a class="btn secondary" id="owner-login" href="/login" hidden><svg class="icon"><use href="#ico-lock"/></svg> Continue to private beta dashboard</a>
+   <a class="btn secondary" id="owner-login" href="/account?next=setup" hidden><svg class="icon"><use href="#ico-lock"/></svg> Sign in to save this setup</a>
   </div>
   <p class="caption">Activating supported publishing requires authorized account connections and an active subscription. Review the plan details in Settings before you activate.</p>
   <p class="caption">Create your account or sign in to save this setup in your own workspace. You will choose your actual connected business Pages before activation.</p>
@@ -192,6 +193,7 @@ textarea{min-height:145px;resize:vertical}
 </aside>
 </div>
 </div>
+<footer class="wrap" style="padding-top:0;padding-bottom:35px;font-size:13px" aria-label="Support links"><a href="/help">Help</a> · <a href="/account">My account</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></footer>
 <script>
 (() => {
 "use strict";

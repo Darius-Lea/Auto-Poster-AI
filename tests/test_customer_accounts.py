@@ -28,6 +28,7 @@ class CustomerIsolationTests(unittest.TestCase):
         self.a=self.web.app.test_client();self.b=self.web.app.test_client()
         self.wa=self.register(self.a,'a@example.test','Customer A')
         self.wb=self.register(self.b,'b@example.test','Customer B')
+        with self.accounts.connect() as c:c.execute('UPDATE customer_accounts SET email_verified=1')
 
     def csrf(self,client):
         with client.session_transaction() as sess:return sess['csrf']
