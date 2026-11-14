@@ -352,7 +352,7 @@ details>div{padding:0 12px 10px}
 </style></head><body>
 <header><b>✳ Auto Poster AI</b><div class="row"><a href="/pages">Facebook Pages</a><a href="/control">⚙ Controls</a><a href="/logout">Sign out</a></div></header>
 <main>
-<p><span class="pill">Single-owner starter · Live connections shown below</span></p>
+<p><span class="pill">Private beta · Single-owner dashboard · Not ready for public signup</span></p>
 {% if payment_required and not paid %}<p class="note">⏸ Your subscription is not active. Posting and scheduling are disabled until payment is confirmed. <a href="/control">Manage subscription</a>.</p>{% endif %}
 <h1>Make a post</h1>
 <p>Write your message, choose where it goes, then post now or schedule it.</p>
@@ -363,22 +363,22 @@ details>div{padding:0 12px 10px}
 <label for="content">Your post</label>
 <textarea id="content" name="content" required maxlength="10000"
 placeholder="Write about your latest video, a sale, an adoption, a community update, or anything you want to share."></textarea>
-<details id="destinations">
-<summary>＋ Choose where to post <span id="selected-count" class="pill">1 selected</span></summary>
+<details id="destinations" open>
+<summary>Step 1 · Choose where to post <span id="selected-count" class="pill">0 selected</span></summary>
 <div>
-<label class="dest"><input type="checkbox" name="destinations" value="draft" checked>
+<label class="dest"><input type="checkbox" name="destinations" value="draft">
 <span><b>Save a draft</b><small>No external publishing</small></span><span class="pill success">Ready</span></label>
 <label class="dest"><input type="checkbox" name="destinations" value="facebook">
-<span><b>Facebook Page</b><small>Text posts on your authorized Page</small></span>
+<span><b>Existing owner Facebook Page</b><small>Only available when owner credentials are configured</small></span>
 <span class="pill {{ 'success' if fb_enabled else 'pending' }}">{{ 'Owner Page' if fb_enabled else 'Connect first' }}</span></label>
 {% for pg in fb_pages %}
 <label class="dest"><input type="checkbox" name="facebook_pages" value="{{pg.page_id}}">
 <span><b>Facebook · {{pg.name}}</b><small>Post directly to this authorized Page</small></span><span class="pill success">Ready</span></label>
 {% endfor %}
-<p><small><a href="/pages">Connect another Facebook business Page</a>. Choose each destination separately; none is selected automatically.</small></p>
+<p><small><a href="/pages">Connect a Facebook business Page</a>. Choose each destination separately; none is selected automatically.</small></p>
 {% for app in other_apps %}
 <label class="dest"><input type="checkbox" name="destinations" value="{{app}}">
-<span><b>{{app|title}}</b><small>Save publishing request</small></span><span class="pill pending">Needs integration</span></label>
+<span><b>{{app|title}}</b><small>Not connected — request only, no publishing</small></span><span class="pill pending">Needs integration</span></label>
 {% endfor %}
 <div id="websites"></div>
 <button type="button" class="ghost" id="add-website">＋ Post to my website</button>
@@ -397,7 +397,7 @@ placeholder="Write about your latest video, a sale, an adoption, a community upd
 <p><small>This repeats the <b>same message</b>. For new updates from a site, use Website Autopilot below instead.</small></p>
 </div>
 </details>
-<label for="when">When should the first one go?</label>
+<label for="when">Step 2 · When should this post be processed?</label>
 <select name="when" id="when"><option value="now">As soon as possible</option>
 <option value="later">Choose date & time</option></select>
 <div id="later-fields" hidden>
@@ -405,8 +405,8 @@ placeholder="Write about your latest video, a sale, an adoption, a community upd
 </div>
 <input type="hidden" id="utc_due" name="utc_due">
 <input type="hidden" id="time_zone" name="time_zone" value="UTC">
-<p class="note">Only explicitly selected and authorized Facebook business Pages can receive live posts. Other social apps remain <b>Needs connection</b> and are not published. Review every chosen Page before scheduling.</p>
-<button type="submit" style="width:100%;margin-top:15px">Post or schedule</button>
+<p class="note">Only connected Facebook Pages can publish. Drafts stay in this app. Other destinations create requests only; they will not publish. Confirm each destination before continuing.</p>
+<button type="submit" style="width:100%;margin-top:15px">Review and confirm destinations</button>
 </form>
 </section>
 <aside>
@@ -415,7 +415,7 @@ placeholder="Write about your latest video, a sale, an adoption, a community upd
 <b>{{counts.get('published',0)}}</b> published</p>
 <p><b>{{counts.get('needs_connection',0)}}</b> awaiting connection ·
 <b>{{counts.get('needs_review',0)}}</b> needing review</p>
-<div class="note">The scheduler runs while the hosted service stays on. This starter still needs deployment before you can use it from any device.</div></div>
+<div class="note">Private beta: free hosting may sleep, and local drafts may disappear after restart. Do not rely on this preview for time-critical publishing.</div></div>
 <div class="panel"><h2>Want posts from a website?</h2>
 <p>For example, find new adoption listings, your own blog updates, or permitted community feeds.</p>
 <p><b>Watch a website</b> is different from publishing <b>to</b> a website.</p>
@@ -472,6 +472,18 @@ if(!date.value||isNaN(d.getTime())){e.preventDefault();alert('Choose a valid dat
 document.getElementById('utc_due').value=d.toISOString();
 }
 document.getElementById('time_zone').value=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';
+const chosen=[...form.querySelectorAll('input[name="destinations"]:checked,input[name="facebook_pages"]:checked')].map(input=>{
+  const label=input.closest('label');
+  return label?.querySelector('b')?.textContent?.trim()||input.value;
+});
+form.querySelectorAll('input[name="websites"]').forEach(input=>chosen.push('Website request: '+input.value));
+const timing=when.value==='later'?new Date(date.value).toLocaleString():'As soon as the service is available';
+const requestOnly=chosen.some(name=>/instagram|tiktok|youtube|linkedin|pinterest|threads|website request|^x$/i.test(name));
+const message='Confirm destination'+(chosen.length===1?'':'s')+':\n• '+chosen.join('\n• ')+
+  '\n\nWhen: '+timing+'\nRepeat: '+document.getElementById('frequency').value+
+  (requestOnly?'\nSome destinations only save a connection request; they will NOT publish.':'')+
+  '\n\nContinue?';
+if(!window.confirm(message)) e.preventDefault();
 });
 </script></body></html>
 """
