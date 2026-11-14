@@ -1,0 +1,53 @@
+# Separate, opt-in starter app. Does NOT modify existing Render worker.
+# Select "New Blueprint" in Render; persistent disk requires a paid eligible service.
+services:
+  - type: web
+    name: auto-poster-ai-starter
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements-app.txt
+    startCommand: gunicorn --workers 1 --threads 2 --bind 0.0.0.0:$PORT app_mvp_wsgi:app
+    disk:
+      name: autopost-mvp-state
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: AUTOPOST_REQUIRE_PAYMENT
+        value: "true"
+      - key: AUTOPOST_PUBLIC_LANDING
+        value: "true"
+      - key: AUTOPOST_PUBLIC_URL
+        sync: false
+      - key: AUTOPOST_WORKER_TOKEN
+        generateValue: true
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_BASIC_PRICE_ID
+        sync: false
+      - key: AUTOPOST_APP_PASSWORD
+        sync: false
+      - key: AUTOPOST_WEB_SECRET
+        generateValue: true
+      - key: AUTOPOST_WEB_DB
+        value: /var/data/autopost_web.db
+      - key: AUTOPOST_COOKIE_SECURE
+        value: "true"
+      - key: META_PAGE_ID
+        sync: false
+      - key: META_PAGE_ACCESS_TOKEN
+        sync: false
+      - key: META_GRAPH_VERSION
+        value: v26.0
+      # One service-owned Meta app; customers never handle these values.
+      - key: META_APP_ID
+        sync: false
+      - key: META_APP_SECRET
+        sync: false
+      - key: META_OAUTH_REDIRECT_URI
+        sync: false
+      - key: META_FACEBOOK_LOGIN_CONFIG_ID
+        sync: false
+      - key: META_PAGES_ENCRYPTION_SECRET
+        generateValue: true

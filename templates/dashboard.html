@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a101c">
+<meta name="description" content="Create, schedule, and manage your Auto Poster AI publishing from any device.">
+<link rel="manifest" href="/manifest.webmanifest">
+<title>Auto Poster AI · Dashboard</title>
+<style>
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:dark;--bg:#0b1220;--surface:#132033;--surface2:#182940;--outline:#2e4258;--ink:#f5f8fd;--muted:#afbfcd;--green:#c8f68a;--blue:#91d6ff}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;color:var(--ink);background:radial-gradient(circle at 80% 0%,#1a3b4960,transparent 39%),var(--bg);line-height:1.5}
+a{color:var(--green);text-decoration:none}a:hover{text-decoration:underline}button,input,textarea,select{font:inherit}button{cursor:pointer}
+.shell{max-width:1210px;margin:0 auto;display:grid;grid-template-columns:220px minmax(0,1fr);min-height:100vh}
+.side{padding:30px 17px;border-right:1px solid var(--outline);position:sticky;top:0;max-height:100vh}
+.logo{font-weight:900;font-size:20px;letter-spacing:-.6px;margin-bottom:38px}.logo span{color:var(--green)}.logo .symbol{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:11px;background:#33495d;margin-right:8px;color:var(--green)}
+.navlinks{display:grid;gap:8px}.navlinks a,.navlinks span{color:#c4d1e0;padding:12px 14px;border-radius:11px;font-weight:650;font-size:14px}.navlinks a.active{background:#c8f68a20;color:var(--green)}.navlinks span.disabled{color:#8196a9}.navlinks a:hover{background:#22344a;text-decoration:none}.navlinks a{display:flex;align-items:center;gap:11px}.side-footer{position:absolute;bottom:32px;left:22px;font-size:12px;color:#8ea4b5;max-width:175px}
+.main{padding:32px clamp(17px,3.1vw,40px) 100px;min-width:0}.topline{display:flex;justify-content:space-between;align-items:start;gap:14px}.eyebrow{font-size:12px;color:var(--green);text-transform:uppercase;letter-spacing:1.5px;font-weight:850}
+h1{letter-spacing:-1.5px;font-size:clamp(31px,3vw,42px);line-height:1.13;margin:10px 0 8px}h2{font-size:19px;margin:0 0 12px;letter-spacing:-.4px}p{color:var(--muted);margin:7px 0 14px;font-size:14px;line-height:1.65}
+.badge{display:inline-flex;align-items:center;gap:6px;border-radius:30px;padding:6px 10px;background:#2b3d50;color:#d5e2ee;font-size:11px;font-weight:750;white-space:nowrap}
+.badge.good{background:#31503c;color:#c8f68a}.badge.warn{background:#574334;color:#f4da9c}
+.banner{border:1px solid #6d6640;background:linear-gradient(105deg,#3d392b,#242d36);border-radius:16px;padding:17px 19px;margin:24px 0;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.banner b{font-size:14px}.banner p{font-size:12px;margin:4px 0 0}.banner .badge{background:#625b37;color:#f8e5a9}
+.card{background:linear-gradient(150deg,#17263a,#121e2e);border:1px solid var(--outline);border-radius:18px;padding:22px;margin:18px 0}
+.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.metric{padding:18px;background:#162539;border:1px solid var(--outline);border-radius:15px}.metric strong{display:block;font-size:29px;line-height:1.3}.metric small{color:var(--muted);font-size:12px}
+.content-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(255px,1fr);gap:17px;align-items:start}
+.help{background:#243747;border:1px solid #435d65;border-radius:12px;padding:14px;font-size:13px;margin:12px 0;color:#dfedfa}.help strong{color:var(--green)}
+.steps{display:grid;gap:11px;padding:0;margin:18px 0 0;list-style:none}.steps li{display:flex;gap:11px;align-items:start}.number{width:27px;height:27px;border-radius:9px;background:#294351;color:var(--green);display:grid;place-items:center;flex-shrink:0;font-size:12px;font-weight:800}.steps b{font-size:13px}.steps small{display:block;font-size:12px;color:#9eb2c2;margin-top:3px}
+.button,.button-secondary{display:inline-flex;align-items:center;justify-content:center;border-radius:11px;border:1px solid transparent;padding:12px 16px;background:var(--green);color:#1b2c1a;font-size:13px;font-weight:800;min-height:46px;text-decoration:none}.button:hover{text-decoration:none;background:#d8ff9d}.button-secondary{background:#23364b;color:#eef4fc;border:1px solid #405570}.button-secondary:hover{background:#2e4560;text-decoration:none}.button-full{width:100%}
+label{display:block;font-size:13px;font-weight:720;margin:16px 0 7px}textarea,select,input[type=datetime-local],input[type=text]{width:100%;background:#0c1929;color:#f3f7fe;border:1px solid #42576c;border-radius:11px;padding:13px;font-size:15px;outline-offset:2px}textarea{min-height:135px;resize:vertical}
+details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{padding:13px 15px;cursor:pointer;font-size:14px;font-weight:750;list-style-position:inside}summary:focus-visible{outline:3px solid var(--green)}.details-inner{padding:6px 14px 15px}
+.destination{display:flex;gap:11px;align-items:center;padding:13px 7px;border-bottom:1px solid #2d4053;cursor:pointer;font-weight:500;margin:0}.destination:last-child{border:0}.destination input{width:21px;height:21px;accent-color:#c8f68a;flex-shrink:0}.destination .desc{flex:1;min-width:0}.destination .desc b{display:block;font-size:13px}.destination .desc small{display:block;font-size:11px;color:#adbdcc;font-weight:400}.destination.offline{opacity:.68;cursor:not-allowed}.destination .badge{flex-shrink:0}.footnote{color:#9cb0c2;font-size:11px;line-height:1.5}
+.flex{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.split{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.actions{display:flex;gap:10px;flex-wrap:wrap}
+.posts{display:grid;gap:13px}.post{border:1px solid #31455a;background:#142237;border-radius:14px;padding:17px}.post p{white-space:pre-wrap;overflow-wrap:anywhere;color:#eaf2fa}.post small{color:#95a9bb;font-size:11px}.post button{border:1px solid #536679;background:#26384c;color:#f5f7fe;border-radius:10px;padding:9px 12px;margin-top:10px;font-size:12px;font-weight:650}
+.empty{padding:24px;text-align:center;border:1px dashed #526478;border-radius:13px;color:#aabcce;font-size:13px}
+.preview-box{margin-top:11px;padding:15px;border:1px solid #3f5466;background:#182c41;border-radius:13px}
+.preview-box .label{font-size:11px;text-transform:uppercase;letter-spacing:1px;font-weight:750;color:#95c6e9;margin-bottom:8px}.preview-text{white-space:pre-wrap;overflow-wrap:anywhere;max-height:190px;overflow:auto;font-size:14px;color:#e8f3fd}.small{font-size:12px;color:#afc1d0}
+.modal[hidden]{display:none}.modal{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:17px;background:#010714ce}.modal-panel{width:min(100%,520px);background:#142239;border:1px solid #5e7691;border-radius:19px;padding:25px;box-shadow:0 24px 90px #0009}.modal-panel h2{font-size:24px;margin:3px 0 10px}.modal-panel .actions{margin-top:20px}.modal-panel .actions>*{flex:1}
+.mobile-nav{display:none}
+@media(max-width:950px){.shell{grid-template-columns:1fr}.side{position:static;display:flex;align-items:center;justify-content:space-between;max-height:none;border-right:0;border-bottom:1px solid var(--outline);padding:16px 22px}.side .logo{margin:0}.navlinks,.side-footer{display:none}.main{padding-top:25px}}
+@media(max-width:700px){.content-grid{grid-template-columns:1fr}.metrics{gap:7px}.metric{padding:14px 9px}.metric strong{font-size:23px}.metric small{font-size:10px}.card{padding:17px}.banner{display:block;margin-top:20px}.banner .badge{margin-top:10px}.main{padding-left:15px;padding-right:15px}.side{padding:13px 17px}.mobile-nav{display:grid;position:fixed;bottom:0;left:0;right:0;grid-template-columns:repeat(5,1fr);z-index:25;background:#0e1928ed;border-top:1px solid #3c4d5b;padding:9px 4px max(10px,env(safe-area-inset-bottom));backdrop-filter:blur(15px)}.mobile-nav a{font-size:11px;color:#c7d6e3;text-align:center;display:grid;gap:2px}.mobile-nav a .icon{width:21px;height:21px;margin:auto}.mobile-nav a:hover{text-decoration:none;color:var(--green)}.main{padding-bottom:110px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png" sizes="180x180">
+<link rel="stylesheet" href="/static/brand/brand.css">
+</head>
+<body>
+{% include "_icons.html" %}
+<div class="shell">
+<aside class="side">
+ <div class="logo"><img class="brand-icon" src="/static/brand/mark.svg" width="34" height="34" alt="">Auto Poster <span>AI</span></div>
+ <nav class="navlinks" aria-label="Dashboard navigation">
+  <a href="#overview" class="active"><svg class="icon" aria-hidden="true"><use href="#ico-grid"/></svg> Home</a>
+  <a href="#create"><svg class="icon" aria-hidden="true"><use href="#ico-pencil"/></svg> Create a post</a>
+  <a href="#posts"><svg class="icon" aria-hidden="true"><use href="#ico-calendar"/></svg> Your posts</a>
+  <a href="/pages"><svg class="icon" aria-hidden="true"><use href="#ico-plug"/></svg> Facebook Pages</a>
+  <a href="{{ '/automations' if owner_workspace else '/studio#automations' }}"><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg> Build automations</a>
+  <a href="{{ '/control' if owner_workspace else '/account/settings' }}"><svg class="icon" aria-hidden="true"><use href="#ico-settings"/></svg> Settings</a>
+  <a href="/studio">Creative studio</a><a href="/clips">Clip Studio</a><a href="/connections">Creative connections</a><a href="/reports">Reports</a><a href="/install">Install app</a>
+ </nav>
+ <div class="side-footer">{% if customer_account %}YOUR WORKSPACE<br>{{customer_account.name}}{% else %}OWNER WORKSPACE<br>Legacy publisher controls{% endif %}<p><a href="/logout">Sign out</a></p></div>
+</aside>
+<main class="main">
+ <section id="overview">
+  <div class="topline">
+   <div><div class="eyebrow">YOUR CONTROL CENTER</div><h1>Welcome to Auto Poster AI</h1><p>Prepare one useful post, choose your Page, and review it before publishing.</p></div>
+   <a class="button-secondary" href="/logout">Sign out</a>
+  </div>
+  <p><a class="button" href="/launch">Only have a business idea? Build my first plan</a></p>
+  {% if imported %}
+  <div class="banner" role="status"><div><b><svg class="icon" aria-hidden="true"><use href="#ico-check"/></svg> Setup saved to your workspace</b><p>Your chosen platforms, content and timing have been saved as an inactive plan. Nothing is publishing. Free preview storage can reset.</p></div><span class="badge good">SETUP SAVED</span></div>
+  {% endif %}
+  <div id="guest-import" class="card" hidden>
+   <div class="split"><h2><svg class="icon" aria-hidden="true"><use href="#ico-file"/></svg> Your setup is ready to transfer</h2><span class="badge good">READY TO SAVE</span></div>
+   <p>You prepared a post and schedule before signing in. Save them in your dashboard now—publishing will stay off.</p>
+   <div id="guest-summary" class="help"></div>
+   <form method="post" action="/start/import" id="guest-import-form">
+    <input type="hidden" name="_csrf" value="{{csrf}}">
+    <input type="hidden" name="setup_payload" id="guest-payload">
+    <button type="submit" class="button">Save my setup to the dashboard</button>
+   </form>
+   <p class="small">Your saved setup belongs to this workspace. Review its connected Pages before activating publication.</p>
+  </div>
+  {% if preview_mode %}
+  <div class="banner" role="status"><div><b><svg class="icon" aria-hidden="true"><use href="#ico-shield"/></svg> Free beta: safe preview mode</b><p>Create content, plan your schedule and try the workflow. This preview cannot publish externally and may lose saved setups after a restart.</p></div><span class="badge">TEST MODE</span></div>
+  {% elif payment_required and not paid %}
+  <div class="banner" role="status"><div><b><svg class="icon" aria-hidden="true"><use href="#ico-lock"/></svg> Publishing is not active.</b><p>Create your content and prepare your schedule. Review your connections and activation settings when you are ready to start.</p></div><a class="button-secondary" href="/control">Activation settings</a></div>
+  {% endif %}
+  <div class="metrics">
+   <div class="metric"><strong>{{counts.get('scheduled',0)}}</strong><small>Scheduled</small></div>
+   <div class="metric"><strong>{{counts.get('draft_ready',0)}}</strong><small>Drafts ready</small></div>
+   <div class="metric"><strong>{{counts.get('setup_only',0)}}</strong><small>Saved setups</small></div>
+  </div>
+  <section class="card" aria-label="Getting started">
+ <div class="split"><h2>Prepare your next post</h2><span class="badge good">YOU ARE IN CONTROL</span></div>
+ <p>Set your preferred content, Pages and timing now. Saving a plan does not start publishing.</p>
+ <ol class="steps">
+  <li><span class="number">1</span><span><b>Choose your destination</b><small><a href="/pages">View Facebook Pages</a>, or plan for a Facebook Page you will connect later.</small></span></li>
+  <li><span class="number">2</span><span><b>Build an automation</b><small>Choose content, source, frequency and approval. <a href="{{ '/automations' if owner_workspace else '/studio#automations' }}">Create a free setup</a>.</small></span></li>
+  <li><span class="number">3</span><span><b>Prepare a post</b><small>Save a draft or future posting plan below. You remain in control of activation.</small></span></li>
+ </ol>
+ <div style="margin-top:18px"><a class="button" href="{{ '/automations' if owner_workspace else '/studio#automations' }}"><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg> Set up an automation for free</a></div>
+ </section>
+ </section>
+ <div class="content-grid">
+  <section class="card" id="create">
+   <div class="split"><h2>Create a post</h2><span class="badge">STEP 1 OF 3</span></div>
+   <p>Write your message, select a destination, then review it before scheduling.</p>
+   <form method="post" action="/schedule" id="composer">
+    <input type="hidden" name="_csrf" value="{{csrf}}">
+    <label for="content">Your message</label>
+    <textarea id="content" name="content" maxlength="10000" required placeholder="What's happening with your business or page?"></textarea>
+    <label>Where should it go? <span class="small">(choose at least one)</span></label>
+    <div class="details-inner" style="border:1px solid #41566a;border-radius:12px">
+     <label class="destination" for="draft"><input type="checkbox" id="draft" name="destinations" value="draft"><span class="desc"><b>Save a draft</b><small>A safe test — never publishes externally</small></span><span class="badge good">Available</span></label>
+     {% if fb_enabled and not preview_mode %}
+     <label class="destination" for="legacyfacebook"><input type="checkbox" id="legacyfacebook" name="destinations" value="facebook"><span class="desc"><b>Existing Facebook Page</b><small>Uses the owner's existing Page authorization</small></span><span class="badge good">Connected</span></label>
+     {% else %}
+     <label class="destination" for="facebook-plan"><input type="checkbox" id="facebook-plan" name="destinations" value="facebook"><span class="desc"><b>Facebook Page — plan now</b><small>Save this post and its timing, then connect the Page you want to use.</small></span><span class="badge">Setup only</span></label>
+     {% endif %}
+     {% for pg in fb_pages %}{% if pg.can_publish and not preview_mode %}
+     <label class="destination" for="fb{{pg.page_id}}"><input type="checkbox" id="fb{{pg.page_id}}" name="facebook_pages" value="{{pg.page_id}}"><span class="desc"><b>{{pg.name}}</b><small>Facebook business Page</small></span><span class="badge good">Connected</span></label>
+     {% endif %}{% endfor %}
+     <div class="destination offline"><span class="desc"><b>Instagram · TikTok · YouTube · more</b><small>Publishing connectors are planned, not operational yet</small></span><span class="badge">Coming later</span></div>
+    </div>
+    <label for="when">When should it be processed?</label>
+    <select id="when" name="when"><option value="now">As soon as possible</option><option value="later">Choose a date and time</option></select>
+    <div id="later-fields" hidden><label for="due">Date and time on this device</label><input type="datetime-local" id="due" name="due"></div>
+    <input type="hidden" id="utc_due" name="utc_due"><input type="hidden" id="time_zone" name="time_zone" value="UTC">
+    <details><summary>More options · Repeat this same message</summary><div class="details-inner"><label for="frequency">Repeat frequency</label><select name="frequency" id="frequency"><option value="once">Do not repeat</option><option value="daily">Every day — same wording</option><option value="weekly">Every week — same wording</option></select><p class="footnote">This doesn't generate fresh content. Repeating creates a new scheduled job only after the previous one completes.</p></div></details>
+    <div class="preview-box" aria-live="polite"><div class="label">Message preview</div><div id="message-preview" class="preview-text">Your message will appear here as you type.</div></div>
+    <p class="footnote">No destination is selected automatically. Saving a Facebook setup keeps it as a plan until you explicitly activate supported publishing.</p>
+    <button class="button button-full" type="submit" id="review-button"><svg class="icon" aria-hidden="true"><use href="#ico-check"/></svg> Review post or setup</button>
+   </form>
+  </section>
+  <aside>
+   <section class="card"><h2>Account connections</h2><p>See which pages you can select and control. No passwords or API keys are requested from customers.</p>
+    <div class="help"><strong>{% if fb_pages or fb_enabled %}Facebook configured{% else %}Facebook not connected{% endif %}</strong><div class="small">{% if preview_mode %}External publishing is disabled for this free test site.{% elif fb_pages %}{{fb_pages|length}} Page connection(s) available.{% else %}Facebook login requires the service-owned Meta integration.{% endif %}</div></div>
+    <a class="button-secondary button-full" href="/pages">Manage Facebook Pages</a>
+   </section>
+   <section class="card"><h2>Automations</h2><p><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg> {{plans|length}} saved {{'plan' if plans|length==1 else 'plans'}}. Create or edit yours for free.</p><a class="button-secondary button-full" href="{{ '/automations' if owner_workspace else '/studio#automations' }}">Manage automation setups</a></section><section class="card"><h2>Autopilot</h2><div class="split"><span class="badge {{ 'good' if not publishing_paused and not preview_mode else 'warn' }}">{{'Preview only' if preview_mode else 'Paused' if publishing_paused else 'Ready for approved schedules'}}</span><span class="small">{{'Owner controls' if owner_workspace else 'Publishing preferences'}}</span></div><p>{% if preview_mode %}You can configure and save automations here, but this preview will not publish anything externally. Your existing live publisher is separate.{% else %}Prepare your workflow, review its requirements in Settings, and explicitly activate supported publishing when you are ready.{% endif %}</p><a href="/control" class="button-secondary button-full">Publishing and pause controls</a></section>
+   <section class="card"><h2>Your creative workbench</h2><p>Set your voice and location, choose Page-specific automations, draft with managed AI and view measured reports.</p><a class="button button-full" href="/studio">Open creative studio</a><p><a href="/clips">Make a video in Clip Studio</a> · <a href="/connections">Connect creative tools</a> · <a href="/reports">View reports</a> · <a href="/install">Install app</a></p></section>
+  </aside>
+ </div>
+ <section class="card" id="imported-setups">
+  <div class="split"><h2>Prepared setups</h2><span class="badge">{{imported_setups|length}} imported</span></div>
+  {% if imported_setups %}
+   <div class="posts">
+   {% for p in imported_setups %}
+   <article class="post">
+    <div class="split"><b>Post configuration</b><span class="badge warn">Saved · Not active</span></div>
+    <p><b>Platforms:</b> {{p.platforms|join(', ')|title}}</p>
+    <p>{{p.message}}</p>
+    {% if p.topic %}<p class="small"><b>Content guidance:</b> {{p.topic}}</p>{% endif %}
+    <small>{{p.frequency.replace('_',' ')|title}} · {{'Selected time ' ~ p.scheduled_at if p.time_type=='at_time' else 'Timing chosen at activation'}} · {{'Review each post' if p.approval=='approve_every_post' else 'Autopilot requested (requires approval)'}}</small>
+    <p class="small">Choose the actual destination and a fresh time. External posts stay inactive until you activate them below.</p>
+<form class="prepare-setup" method="post" action="/setups/{{p.id}}/prepare"><input type="hidden" name="_csrf" value="{{csrf}}"><label>Prepare as<select name="destination"><option value="draft">Internal draft</option><option value="facebook_page">Selected Facebook Pages</option></select></label>{% for page in fb_pages if page.can_publish %}<label><input type="checkbox" name="page_ids" value="{{page.page_id}}"> {{page.name}}</label>{% endfor %}<label>Repeat<select name="frequency"><option value="once">Once</option><option value="daily">Daily — same caption</option><option value="weekly">Weekly — same caption</option></select></label><input name="time_zone" type="hidden" value="UTC"><input name="due_at" type="hidden"><label>Future posting time (your local time)<input type="datetime-local" class="prepare-local-date"></label><button type="submit">Prepare post for review</button></form><p class="small">For a twice-daily source workflow, use the <a href="/studio#automations">automation studio</a> and an eligible plan.</p>
+   </article>
+   {% endfor %}
+   </div>
+  {% else %}<p class="small">No public-wizard setups have been imported to this workspace. You can <a href="/start">create a setup without logging in</a>, then import it.</p>{% endif %}
+ </section>
+ <section class="card" id="posts">
+  <div class="split"><h2>Your posts</h2><span class="badge">{{posts|length}} recent</span></div>
+  {% if posts %}<div class="posts">
+  {% for p in posts %}
+   <article class="post">
+    <div class="split"><b>{{page_names.get(p.page_id, 'Facebook Page') if p.platform=='facebook_page' else 'Draft' if p.platform=='draft' else 'Facebook Page' if p.platform=='facebook' else p.platform|title}}</b><span class="badge {{'good' if p.status in ('published','draft_ready') else 'warn' if p.status in ('needs_review','needs_connection','setup_only') else ''}}">{{'Saved setup · not publishing' if p.status=='setup_only' else p.status.replace('_',' ')|title}}</span></div>
+    <p>{{p.content}}</p>{% if p.status=='draft_ready' %}<p><a class="button-secondary" href="/studio?draft_id={{p.id}}">Use this draft</a></p>{% endif %}{% if p.status=='needs_review' %}<p class="help">Check your Facebook Page before retrying: a lost response may still mean the post was published. <a href="/pages">Check the Page connection</a> · <a href="/help">Get help with this delivery</a></p>{% endif %}<small>Planned: <time datetime="{{p.due_at}}">{{p.due_at}} UTC</time> · {{p.frequency}}</small>
+    {% if p.remote_id %}<p class="small">Confirmed delivery: {{p.remote_id}}</p>{% endif %}
+    {% if p.error %}<p class="small">Needs attention: {{p.error}}</p>{% endif %}
+    {% if p.status in ('scheduled','setup_only') %}<form method="post" action="/cancel/{{p.id}}"><input type="hidden" name="_csrf" value="{{csrf}}"><button type="submit">{{'Remove planned post' if p.status=='setup_only' else 'Cancel scheduled post'}}</button></form>{% endif %}
+{% if p.status in ('setup_only','quota_held') %}<form class="prepare-setup" method="post" action="/posts/{{p.id}}/reschedule"><input type="hidden" name="_csrf" value="{{csrf}}"><input name="due_at" type="hidden"><input name="time_zone" type="hidden"><label>New posting time<input type="datetime-local" class="prepare-local-date" required></label><button type="submit">Save new time for review</button></form>{% endif %}
+{% if p.status=='setup_only' and not preview_mode and paid and p.platform in ('facebook','facebook_page') %}
+<form method="post" action="/activate/{{p.id}}"><input type="hidden" name="_csrf" value="{{csrf}}"><button type="submit" onclick="return confirm('Activate this saved post for its originally selected time?')">Activate this post</button></form>
+{% endif %}
+   </article>
+  {% endfor %}
+  </div>{% else %}<div class="empty"><img class="brand-empty-art" src="/static/brand/empty-posts.svg" width="150" height="96" alt=""><p style="margin:0">No posts yet. Create a test draft above to see your first result.</p></div>{% endif %}
+ </section>
+</main>
+</div>
+<footer class="small" style="max-width:1100px;margin:12px auto 88px;padding:0 20px" aria-label="Help and account"><a href="/help">Help</a> · <a href="/account/settings">My account</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></footer>
+<nav class="mobile-nav" aria-label="Mobile navigation">
+ <a href="#overview"><svg class="icon" aria-hidden="true"><use href="#ico-grid"/></svg>Home</a>
+ <a href="#create"><svg class="icon" aria-hidden="true"><use href="#ico-pencil"/></svg>Create</a>
+ <a href="#posts"><svg class="icon" aria-hidden="true"><use href="#ico-calendar"/></svg>Posts</a>
+ <a href="{{ '/automations' if owner_workspace else '/studio#automations' }}"><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg>Automate</a><a href="{{'/control' if owner_workspace else '/account/settings'}}"><svg class="icon" aria-hidden="true"><use href="#ico-settings"/></svg>Settings</a>
+</nav>
+<div class="modal" id="confirm-modal" hidden role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+ <div class="modal-panel">
+  <span class="eyebrow">FINAL REVIEW</span><h2 id="confirm-title">Review before saving</h2>
+  <p>Check the destinations and time before you save. Setup plans remain inactive until you explicitly activate supported publishing.</p>
+  <div class="preview-box"><div class="label">Your message</div><div class="preview-text" id="confirm-message"></div></div>
+  <p><b>Destination:</b> <span id="confirm-targets"></span></p>
+  <p><b>Timing:</b> <span id="confirm-time"></span></p>
+  <p><b>Repeat:</b> <span id="confirm-repeat"></span></p><p class="footnote" id="confirm-warning">Saving an automation setup never starts live publishing.</p>
+  <div class="actions"><button type="button" class="button-secondary" id="edit-post">Go back</button><button type="button" class="button" id="confirm-post">Confirm and save</button></div>
+ </div>
+</div>
+<script>
+const form=document.getElementById('composer'), message=document.getElementById('content');
+const when=document.getElementById('when'), due=document.getElementById('due'), later=document.getElementById('later-fields');
+const modal=document.getElementById('confirm-modal'), review=document.getElementById('review-button'), confirm=document.getElementById('confirm-post'), edit=document.getElementById('edit-post');
+let approved=false;
+function renderPreview(){document.getElementById('message-preview').textContent=message.value.trim()||'Your message will appear here as you type.'}
+message.addEventListener('input',renderPreview);
+when.addEventListener('change',()=>{later.hidden=when.value!=='later';due.required=when.value==='later'});
+function selectedLabels(){
+ return Array.from(form.querySelectorAll('input[name="destinations"]:checked,input[name="facebook_pages"]:checked')).map(el=>el.closest('label').querySelector('.desc b').textContent);
+}
+form.addEventListener('submit',e=>{
+ if(approved)return;
+ e.preventDefault();
+ const destinations=selectedLabels();
+ if(!destinations.length){alert('First choose where this post should go. For a safe test, select Save a draft.');return;}
+ if(!message.value.trim()){message.focus();return;}
+ let timing='As soon as possible';
+ if(when.value==='later'){
+   const d=new Date(due.value);
+   if(!due.value||Number.isNaN(d.getTime())||d.getTime()<=Date.now()){alert('Choose a future date and time.');return;}
+   document.getElementById('utc_due').value=d.toISOString();timing=d.toLocaleString();
+ }
+ document.getElementById('time_zone').value=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';
+ document.getElementById('confirm-message').textContent=message.value.trim();
+ document.getElementById('confirm-targets').textContent=destinations.join(', ');
+ document.getElementById('confirm-time').textContent=timing;
+ document.getElementById('confirm-repeat').textContent=document.getElementById('frequency').selectedOptions[0].text;
+ document.getElementById('confirm-warning').textContent = ({{ 'true' if preview_mode or not paid else 'false' }}) ?
+ 'Setup only: Your post and timing will be saved as a plan. Review the connection and subscription requirements in Settings before you activate supported publishing.' :
+ 'Connected destinations can publish at the selected time. Confirm the content carefully.';
+ modal.hidden=false;edit.focus();
+});
+edit.addEventListener('click',()=>{modal.hidden=true;review.focus();});
+confirm.addEventListener('click',()=>{approved=true;modal.hidden=true;form.requestSubmit();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.hidden){modal.hidden=true;review.focus();}});
+for(const f of document.querySelectorAll('.prepare-setup')){const d=f.querySelector('.prepare-local-date'),date=new Date(Date.now()+3600000),pad=n=>String(n).padStart(2,'0');d.value=date.getFullYear()+'-'+pad(date.getMonth()+1)+'-'+pad(date.getDate())+'T'+pad(date.getHours())+':'+pad(date.getMinutes());f.addEventListener('submit',()=>{f.elements.due_at.value=d.value?new Date(d.value).toISOString():'';f.elements.time_zone.value=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';});}
+const importPanel=document.getElementById('guest-import');
+try {
+ const prepared=JSON.parse(localStorage.getItem('autoposter_public_setup_v1')||'null');
+ if(prepared && Array.isArray(prepared.platforms) && prepared.platforms.length && prepared.message && prepared.setup_key){
+  const importedKey=localStorage.getItem('autoposter_last_imported_setup_key');
+  const justImported={{'true' if imported else 'false'}};
+  if(justImported) localStorage.setItem('autoposter_last_imported_setup_key',prepared.setup_key);
+  if(!justImported && importedKey!==prepared.setup_key){
+   importPanel.hidden=false;
+   document.getElementById('guest-payload').value=JSON.stringify(prepared);
+   if(new URLSearchParams(location.search).get('finish_setup')==='1' && sessionStorage.getItem('autoposter_finish_setup')==='1'){sessionStorage.removeItem('autoposter_finish_setup');document.getElementById('guest-import-form').requestSubmit();}
+   document.getElementById('guest-summary').textContent=
+    prepared.platforms.join(', ')+' · '+(prepared.frequency||'once')+
+    ' · '+(prepared.message||'').slice(0,180);
+  }
+ }
+} catch (_) {
+ // Device storage may be disabled; private dashboard still works.
+}
+</script>
+</body></html>

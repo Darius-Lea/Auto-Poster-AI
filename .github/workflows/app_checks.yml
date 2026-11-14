@@ -1,0 +1,107 @@
+name: Mobile control app checks
+
+on:
+  push:
+    branches: [feature/saas-appstore-foundation-2026-11]
+    paths:
+      - "app_mvp.py"
+      - "pwa.py"
+      - "clip_studio_web.py"
+      - "features/clip_studio/**"
+      - "app_control.py"
+      - "customer_accounts.py"
+      - "account_support.py"
+      - "launch.py"
+      - "business_help.py"
+      - "service_readiness.py"
+      - "creative*.py"
+      - "analytics_workbench.py"
+      - "ai_providers.py"
+      - "editor_connectors.py"
+      - "plan_limits.py"
+      - "meta_accounts.py"
+      - "automation_setup.py"
+      - "public_setup.py"
+      - "templates/**"
+      - "static/**"
+      - "website/**"
+      - "tests/**"
+      - "scripts/qa/**"
+      - "requirements*.txt"
+      - ".github/workflows/app_checks.yml"
+  pull_request:
+    paths:
+      - "app_mvp.py"
+      - "pwa.py"
+      - "clip_studio_web.py"
+      - "features/clip_studio/**"
+      - "app_control.py"
+      - "customer_accounts.py"
+      - "account_support.py"
+      - "launch.py"
+      - "business_help.py"
+      - "service_readiness.py"
+      - "creative*.py"
+      - "analytics_workbench.py"
+      - "ai_providers.py"
+      - "editor_connectors.py"
+      - "plan_limits.py"
+      - "meta_accounts.py"
+      - "tests/test_meta_accounts.py"
+      - "tests/test_preview_mode.py"
+      - "tests/test_unpaid_setup.py"
+      - "automation_setup.py"
+      - "public_setup.py"
+      - "templates/public_onboarding.html"
+      - "tests/test_public_onboarding.py"
+      - "templates/automations.html"
+      - "templates/_icons.html"
+      - "website/index.html"
+      - "templates/dashboard.html"
+      - "static/**"
+      - "scripts/qa/**"
+      - "control_bridge.py"
+      - "app_mvp_wsgi.py"
+      - "requirements-app.txt"
+      - "tests/test_app_control.py"
+      - ".github/workflows/run.yml"
+      - ".github/workflows/app_checks.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  safety-and-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install app dependencies
+        run: pip install -r requirements-app.txt
+      - name: Compile mobile control code
+        run: python -m compileall -q app_mvp.py app_control.py automation_setup.py public_setup.py meta_accounts.py control_bridge.py app_mvp_wsgi.py
+      - name: Test the subscription and autopilot gates
+        run: python -m unittest discover -s tests -p 'test_app_control.py' -v
+      - name: Run existing publishing regressions
+        run: python -m unittest discover -s tests -v
+      - name: Install test browser
+        run: python -m playwright install --with-deps chromium
+      - name: Check desktop and phone setup screens
+        env:
+          AUTOPOST_QA_ARTIFACT_DIR: qa-artifacts
+        run: |
+          python scripts/qa/brand_setup_smoke.py
+          python scripts/qa/customer_flow_smoke.py
+          python scripts/qa/novice_launch_smoke.py
+          python scripts/qa/install_clip_smoke.py
+      - name: Save browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auto-poster-app-preview
+          path: qa-artifacts/
+          if-no-files-found: ignore

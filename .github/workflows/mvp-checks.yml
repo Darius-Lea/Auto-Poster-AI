@@ -1,0 +1,39 @@
+name: Starter web app checks
+
+on:
+  pull_request:
+    paths:
+      - "app_mvp.py"
+      - "templates/dashboard.html"
+      - "tests/test_preview_mode.py"
+      - "tests/test_unpaid_setup.py"
+      - "automation_setup.py"
+      - "public_setup.py"
+      - "templates/public_onboarding.html"
+      - "tests/test_public_onboarding.py"
+      - "templates/automations.html"
+      - "templates/_icons.html"
+      - "website/index.html"
+      - "app_mvp_wsgi.py"
+      - "requirements-app.txt"
+      - "tests/test_web_mvp.py"
+      - ".github/workflows/mvp-checks.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install app dependencies
+        run: pip install -r requirements-app.txt
+      - name: Validate source syntax
+        run: python -m compileall -q app_mvp.py app_mvp_wsgi.py
+      - name: Test web starter offline
+        run: python -m unittest discover -s tests -p test_web_mvp.py -v

@@ -1,0 +1,26 @@
+{
+  "name": "auto-poster-ai-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Native client source preparation; not a published store release",
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.cjs",
+    "configure": "node scripts/configure.cjs",
+    "prepare:android": "npm run configure && cap sync android",
+    "prepare:ios": "npm run configure && cap sync ios",
+    "build:android": "npm run prepare:android && node scripts/build.cjs android",
+    "build:ios": "npm run prepare:ios && node scripts/build.cjs ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.6.2",
+    "@capacitor/core": "8.6.2",
+    "@capacitor/ios": "8.6.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.2"
+  }
+}

@@ -78,8 +78,17 @@ jobs:
       - name: Install Chromium
         if: steps.pending.outputs.run == 'true'
         run: python -m playwright install --with-deps chromium
-      - name: Publish one post with up to ten current bookings
+      - name: Enforce payment and mobile autopilot controls
+        id: controls
         if: steps.pending.outputs.run == 'true'
+        env:
+          AUTOPOST_CONTROL_URL: ${{ vars.AUTOPOST_CONTROL_URL }}
+          AUTOPOST_CONTROL_TOKEN: ${{ secrets.AUTOPOST_CONTROL_TOKEN }}
+          AUTOPOST_REMOTE_REQUIRED: ${{ vars.AUTOPOST_REMOTE_REQUIRED || 'false' }}
+          AUTOPOST_REQUESTED_MODE: catchup
+        run: python control_bridge.py
+      - name: Publish one post with up to ten current bookings
+        if: steps.pending.outputs.run == 'true' && steps.controls.outputs.run == 'true'
         env:
           PUBLISH_BACKEND: ${{ vars.PUBLISH_BACKEND || 'queue' }}
           META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
