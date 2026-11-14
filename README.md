@@ -1,5 +1,17 @@
 # Auto Post
 
+## Customer app and installable clients
+
+The customer website uses authenticated workspaces, its own scheduler,
+and `/clips` for private Clip Studio uploads, previews and caption revisions.
+It stays separate from the original owner publisher described below.
+See [hosted app setup](docs/HOSTED_APP_DEPLOYMENT.md),
+[actual integration status](docs/INTEGRATION_STATUS.md),
+[beginner experience audit](docs/BEGINNER_EXPERIENCE_AUDIT.md), and
+[store submission requirements](docs/STORE_SUBMISSION.md).
+Native client sources are included; no signed store release is claimed.
+
+
 A configurable public-records publishing pipeline. It scrapes arrest/most-wanted listings
 from configured sheriff sites, stamps a city logo onto each image, writes a neutral factual caption with
 Google Gemini, publishes through a pluggable backend, and sends a Telegram summary after every run.
@@ -50,6 +62,18 @@ See the [product roadmap](docs/ROADMAP.md) for the proposed login-based subscrip
 to publish fresh photos in groups of up to ten, including previously individual
 test bookings. It retains each person's status tracking, then allows the normal
 individual schedule to resume. Keep the delivery caches; do not reset them.
+
+## Clip Studio
+
+Clip Studio is an Auto Poster feature that turns a podcast episode — a
+local file or a video URL — into a finished vertical clip (hook,
+captions, speaker framing, loudness-normalized, face-checked) and hands
+it into the same `outbox/` queue this pipeline publishes from, with its
+caption built from the clip's hook. It ships with its own engine,
+per-client brand kits, style registers, editable captions, and a
+standalone local web UI. Its extra dependencies live in
+`requirements-clip.txt`, separate from the main pipeline's. See
+[features/clip_studio/README.md](features/clip_studio/README.md).
 
 Booking captions include: *All individuals are presumed innocent until proven guilty.*
 Daily roster status notes can follow the original caption.

@@ -1,0 +1,31 @@
+{% extends 'studio_base.html' %}{% block title %}Clip Studio{% endblock %}
+{% block content %}
+<div class="eyebrow">Your video. A shorter story.</div><h1>Make a clip worth watching.</h1>
+<p>Turn a video you already have into a short, captioned clip. Upload it, add your business name, and let us suggest a moment. Review it before you share.</p>
+<p class="notice">{{readiness.message}}</p><p>Only have an idea? <a href="/launch">Make a simple plan first</a>.</p><details><summary>I have never made a video. What should I record?</summary><p>Try a 20–60 second video introducing one useful idea, answering a customer question, or demonstrating your product. Use a quiet room, face a window, and speak clearly. Save the recording to your phone or computer, then choose it below. Use your own recording or a video you have permission to edit.</p></details>
+{% if render_notice %}<p class="notice" role="status">{{render_notice}} {% if needs_verification %}<a href="/account/settings">Confirm my email</a>{% endif %}</p>{% endif %}
+<div class="studio-grid"><section class="studio-card"><h2>1. Choose your video</h2>
+<form id="clip-upload" enctype="multipart/form-data" method="post" action="/clips/jobs">
+<input type="hidden" name="_csrf" value="{{csrf}}">
+<label>Your video<input type="file" name="video" required accept=".mp4,.mov,.mkv,.webm,.m4v,video/mp4,video/quicktime,video/webm" {% if not can_render %}disabled{% endif %}></label>
+<p class="muted">MP4, MOV, MKV, WEBM or M4V. Up to 200 MB and 90 minutes, with audible speech. Links and private server files are not accepted.</p>
+<label>Your business or creator name, optional<input name="business_name" maxlength="80" value="{{business_name}}" placeholder="Your business name"></label>
+<h2>2. Make it yours</h2>
+<label>Your brand color<input type="color" name="accent" value="#a7f36a"></label>
+<details><summary>Adjust the moment or style, optional</summary>
+<label>How much would you like to show?<select name="duration"><option value="15">A quick taste · 15 seconds</option><option value="30">A short story · 30 seconds</option><option value="45" selected>A complete moment · 45 seconds</option><option value="60">A little more detail · 1 minute</option></select></label>
+<label>Choose the moment<select name="mode"><option value="auto">Suggest a moment from the words</option><option value="manual">Start at a time I choose</option></select></label>
+<label id="clip-start-label" hidden style="display:none">Where should it start? Seconds into your video<input type="number" name="start" min="0" step="0.1" value="0"></label>
+<label>Layout<select name="layout"><option value="cutaway">Follow the speaker</option><option value="split">Two speakers stacked</option></select></label>
+<label>Caption style<select name="style"><option value="standard">Standard</option><option value="bar">Bar</option><option value="minimal">Minimal</option></select></label>
+<label>Show or business name, optional<input name="title" maxlength="100" placeholder="Your show"></label>
+<label>Opening hook, optional<input name="hook" maxlength="160" placeholder="Leave blank for a suggested hook"></label>
+</details>
+<label><input type="checkbox" name="permission_confirmed" value="yes" required> I own this video or have permission to edit and use it.</label>
+<button id="clip-submit" {% if not can_render %}disabled{% endif %}>Make my clip</button>
+</form><p id="clip-status" role="status" aria-live="polite"></p>
+<p class="muted">Three render attempts per UTC day, including caption revisions. Up to two clips may wait at once. Rendering can take several minutes. You can leave this page and return.</p></section>
+<div><section class="studio-card"><h2>See a finished example</h2><video controls preload="none" src="/clips/example" style="display:block;max-width:100%;max-height:360px;margin:auto" aria-label="Example captioned vertical clip"></video><p class="muted">An example of the format. Your result depends on your video and the selected speaking moment.</p><h2>Review before you share</h2><p>The renderer suggests moments from transcript signals. It does not know future engagement or guarantee a viral result. Check names, captions, framing and rights yourself.</p><p>Your source and finished files remain private to your account here. Delete them below when you no longer need them.</p><p><strong>Clips are not automatically posted.</strong> Download a finished video and upload it through your chosen platform. The current Facebook text-post workflow does not publish this video.</p><a href="/studio">Return to text drafts and automations</a></section>
+<section aria-labelledby="clip-results-title"><h2 id="clip-results-title">3. Watch and download</h2><p id="clip-empty">Loading your clips…</p><div id="clip-jobs"></div></section></div></div>
+<script src="/static/clip-studio.js" defer></script>
+{% endblock %}

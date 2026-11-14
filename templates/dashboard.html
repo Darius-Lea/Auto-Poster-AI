@@ -57,7 +57,7 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
   <a href="/pages"><svg class="icon" aria-hidden="true"><use href="#ico-plug"/></svg> Facebook Pages</a>
   <a href="{{ '/automations' if owner_workspace else '/studio#automations' }}"><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg> Build automations</a>
   <a href="{{ '/control' if owner_workspace else '/account/settings' }}"><svg class="icon" aria-hidden="true"><use href="#ico-settings"/></svg> Settings</a>
-  <a href="/studio">Creative studio</a><a href="/connections">Creative connections</a><a href="/reports">Reports</a>
+  <a href="/studio">Creative studio</a><a href="/clips">Clip Studio</a><a href="/connections">Creative connections</a><a href="/reports">Reports</a><a href="/install">Install app</a>
  </nav>
  <div class="side-footer">{% if customer_account %}YOUR WORKSPACE<br>{{customer_account.name}}{% else %}OWNER WORKSPACE<br>Legacy publisher controls{% endif %}<p><a href="/logout">Sign out</a></p></div>
 </aside>
@@ -140,7 +140,7 @@ details{border:1px solid #385069;border-radius:12px;margin:14px 0}summary{paddin
     <a class="button-secondary button-full" href="/pages">Manage Facebook Pages</a>
    </section>
    <section class="card"><h2>Automations</h2><p><svg class="icon" aria-hidden="true"><use href="#ico-sparkles"/></svg> {{plans|length}} saved {{'plan' if plans|length==1 else 'plans'}}. Create or edit yours for free.</p><a class="button-secondary button-full" href="{{ '/automations' if owner_workspace else '/studio#automations' }}">Manage automation setups</a></section><section class="card"><h2>Autopilot</h2><div class="split"><span class="badge {{ 'good' if not publishing_paused and not preview_mode else 'warn' }}">{{'Preview only' if preview_mode else 'Paused' if publishing_paused else 'Ready for approved schedules'}}</span><span class="small">{{'Owner controls' if owner_workspace else 'Publishing preferences'}}</span></div><p>{% if preview_mode %}You can configure and save automations here, but this preview will not publish anything externally. Your existing live publisher is separate.{% else %}Prepare your workflow, review its requirements in Settings, and explicitly activate supported publishing when you are ready.{% endif %}</p><a href="/control" class="button-secondary button-full">Publishing and pause controls</a></section>
-   <section class="card"><h2>Your creative workbench</h2><p>Set your voice and location, choose Page-specific automations, draft with managed AI and view measured reports.</p><a class="button button-full" href="/studio">Open creative studio</a><p><a href="/connections">Connect creative tools</a> · <a href="/reports">View reports</a></p></section>
+   <section class="card"><h2>Your creative workbench</h2><p>Set your voice and location, choose Page-specific automations, draft with managed AI and view measured reports.</p><a class="button button-full" href="/studio">Open creative studio</a><p><a href="/clips">Make a video in Clip Studio</a> · <a href="/connections">Connect creative tools</a> · <a href="/reports">View reports</a> · <a href="/install">Install app</a></p></section>
   </aside>
  </div>
  <section class="card" id="imported-setups">

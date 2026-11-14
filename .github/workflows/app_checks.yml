@@ -5,6 +5,9 @@ on:
     branches: [feature/saas-appstore-foundation-2026-11]
     paths:
       - "app_mvp.py"
+      - "pwa.py"
+      - "clip_studio_web.py"
+      - "features/clip_studio/**"
       - "app_control.py"
       - "customer_accounts.py"
       - "account_support.py"
@@ -29,6 +32,9 @@ on:
   pull_request:
     paths:
       - "app_mvp.py"
+      - "pwa.py"
+      - "clip_studio_web.py"
+      - "features/clip_studio/**"
       - "app_control.py"
       - "customer_accounts.py"
       - "account_support.py"
@@ -91,6 +97,7 @@ jobs:
           python scripts/qa/brand_setup_smoke.py
           python scripts/qa/customer_flow_smoke.py
           python scripts/qa/novice_launch_smoke.py
+          python scripts/qa/install_clip_smoke.py
       - name: Save browser screenshots
         if: always()
         uses: actions/upload-artifact@v4

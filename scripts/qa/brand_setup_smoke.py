@@ -23,7 +23,7 @@ with tempfile.TemporaryDirectory(prefix='autopost-ux-') as folder:
     for name,size in [('desktop',{'width':1440,'height':1000}),('mobile',{'width':390,'height':844})]:
      context=browser.new_context(viewport=size)
      page=context.new_page();page.on('pageerror',lambda e:errors.append(str(e)))
-     page.goto(origin+'/welcome');page.wait_for_function("[...document.images].every(i=>i.complete && i.naturalWidth>0)");page.screenshot(path=str(artifacts/('autoposter-branded-home-'+name+'.png')),full_page=True);page.get_by_role('link',name='Start for free',exact=True).click()
+     page.goto(origin+'/welcome');page.wait_for_function("[...document.images].every(i=>i.complete && i.naturalWidth>0)");page.screenshot(path=str(artifacts/('autoposter-branded-home-'+name+'.png')),full_page=True);page.get_by_role('link',name='Set up a text post',exact=True).click()
      page.get_by_role('heading',name='Your next post. Planned your way.').wait_for()
      page.wait_for_function("[...document.images].every(i=>i.complete && i.naturalWidth>0)");first=page.locator('body').inner_text()
      assert 'before you pay' not in first.lower()

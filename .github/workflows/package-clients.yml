@@ -1,0 +1,170 @@
+name: Package test clients
+
+# Produces test artifacts only. This workflow never signs or submits to a store.
+on:
+  workflow_dispatch:
+    inputs:
+      app_origin:
+        description: Actual deployed HTTPS origin (no path); do not enter secrets
+        type: string
+        required: true
+      target:
+        description: Test package to build
+        type: choice
+        required: true
+        default: all
+        options: [all, android, ios, windows]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-test-clients-${{ github.ref }}-${{ inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      origin: ${{ steps.origin.outputs.origin }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test deployment input validation
+        run: node --test release/test-*.mjs
+      - name: Validate actual deployment origin
+        id: origin
+        env:
+          AUTOPOST_APP_ORIGIN: ${{ inputs.app_origin }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs';
+          import { validateOrigin } from './release/validate-origin.mjs';
+          const origin = validateOrigin(process.env.AUTOPOST_APP_ORIGIN);
+          appendFileSync(process.env.GITHUB_OUTPUT, `origin=${origin}\n`);
+          NODE
+
+  android:
+    needs: validate
+    if: inputs.target == 'all' || inputs.target == 'android'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      AUTOPOST_APP_ORIGIN: ${{ needs.validate.outputs.origin }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android build tools
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Install and test mobile client
+        working-directory: mobile
+        run: |
+          npm ci
+          npm test
+          npm run prepare:android
+      - name: Build Android debug APK
+        working-directory: mobile/android
+        run: bash ./gradlew --no-daemon assembleDebug
+      - name: Collect test APK
+        run: |
+          mkdir -p client-artifacts
+          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk client-artifacts/AutoPosterAI-Android-debug.apk
+          node release/package-report.mjs android-debug client-artifacts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AutoPosterAI-Android-debug
+          path: client-artifacts/
+          if-no-files-found: error
+          retention-days: 7
+
+  ios:
+    needs: validate
+    if: inputs.target == 'all' || inputs.target == 'ios'
+    runs-on: macos-15
+    timeout-minutes: 35
+    env:
+      AUTOPOST_APP_ORIGIN: ${{ needs.validate.outputs.origin }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Install and test mobile client
+        working-directory: mobile
+        run: |
+          npm ci
+          npm test
+          npm run prepare:ios
+      - name: Inspect selected Xcode toolchain
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks
+      - name: Build unsigned iOS simulator app
+        run: |
+          xcodebuild -project mobile/ios/App/App.xcodeproj -scheme App \
+            -sdk iphonesimulator -configuration Debug \
+            -derivedDataPath "$GITHUB_WORKSPACE/mobile/build/ios" \
+            CODE_SIGNING_ALLOWED=NO build
+      - name: Collect simulator app
+        run: |
+          mkdir -p client-artifacts
+          ditto -c -k --sequesterRsrc --keepParent \
+            mobile/build/ios/Build/Products/Debug-iphonesimulator/App.app \
+            client-artifacts/AutoPosterAI-iOS-Simulator.zip
+          node release/package-report.mjs ios-simulator client-artifacts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AutoPosterAI-iOS-Simulator
+          path: client-artifacts/
+          if-no-files-found: error
+          retention-days: 7
+
+  windows:
+    needs: validate
+    if: inputs.target == 'all' || inputs.target == 'windows'
+    runs-on: windows-2025
+    timeout-minutes: 25
+    env:
+      AUTOPOST_APP_ORIGIN: ${{ needs.validate.outputs.origin }}
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Install and test desktop client
+        working-directory: desktop
+        run: |
+          npm ci
+          npm test
+          npm run dist
+      - name: Collect unsigned Windows installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path client-artifacts | Out-Null
+          $installers = @(Get-ChildItem -Path desktop/dist -Filter '*.exe' -File)
+          if ($installers.Count -eq 0) { throw 'No Windows installer was built.' }
+          $installers | Copy-Item -Destination client-artifacts
+          node release/package-report.mjs windows-unsigned client-artifacts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AutoPosterAI-Windows-unsigned
+          path: client-artifacts/
+          if-no-files-found: error
+          retention-days: 7

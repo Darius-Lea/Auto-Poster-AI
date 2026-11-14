@@ -1,8 +1,8 @@
-"""Testable, single-owner Auto Poster AI web app.
+"""Auto Poster AI workspace web app.
 
 Run with: pip install flask requests python-dotenv && python -m app_mvp
 Requires AUTOPOST_APP_PASSWORD. No social password collection.
-This MVP is deliberately not a public multi-tenant SaaS or App Store binary.
+Customer accounts and connections are isolated by authenticated workspace.
 """
 from __future__ import annotations
 
@@ -113,6 +113,8 @@ def init_db():
     analytics_workbench.init()
     import launch
     launch.init()
+    import clip_studio_web
+    clip_studio_web.init()
 
 
 def current_workspace():
@@ -275,6 +277,8 @@ def recover_interrupted():
             "UPDATE app_posts SET status='needs_review', "
             "error='Worker interrupted; check destination before retry' WHERE status='sending'"
         )
+    import clip_studio_web
+    clip_studio_web.recover_interrupted()
 
 
 def _maintenance_pass(name, callback, interval):
@@ -301,9 +305,10 @@ def worker():
             run_due()
         except Exception:
             app.logger.exception("Scheduler pass failed")
-        import creative_jobs, analytics_workbench
+        import creative_jobs, analytics_workbench, clip_studio_web
         _maintenance_pass('creative',creative_jobs.tick,20)
         _maintenance_pass('analytics',analytics_workbench.tick,60)
+        _maintenance_pass('clips',clip_studio_web.process_next_job,20)
         time.sleep(20)
 
 
@@ -597,7 +602,7 @@ def login():
     return LOGIN
 
 
-ACCOUNT_DESTINATIONS={"setup":"/?finish_setup=1","launch":"/launch","pages":"/pages","studio":"/studio","connections":"/connections","reports":"/reports","settings":"/account/settings"}
+ACCOUNT_DESTINATIONS={"setup":"/?finish_setup=1","launch":"/launch","pages":"/pages","studio":"/studio","clips":"/clips","connections":"/connections","reports":"/reports","settings":"/account/settings"}
 
 
 @app.route("/account", methods=["GET", "POST"])
@@ -644,7 +649,7 @@ def logout():
 
 @app.before_request
 def protect():
-    if request.endpoint in ("login", "account", "static", "stripe_webhook", "manifest", "app_icon", "legacy_claim", "public_website", "public_onboarding", "launch.begin", "launch.build", "launch.export_plan", "account_support.forgot_password", "account_support.reset_password", "account_support.verify_email", "help.guide", "help.privacy", "help.terms"):
+    if request.endpoint in ("login", "account", "static", "stripe_webhook", "manifest", "app_icon", "legacy_claim", "public_website", "public_onboarding", "launch.begin", "launch.build", "launch.export_plan", "account_support.forgot_password", "account_support.reset_password", "account_support.verify_email", "help.guide", "help.privacy", "help.terms", "pwa.install_page", "pwa.service_worker", "pwa.offline_page", "clips.example"):
         return
     if (request.endpoint == "home" and request.method == "GET"
             and os.getenv("AUTOPOST_PUBLIC_LANDING", "false").lower() == "true"
@@ -653,10 +658,16 @@ def protect():
     try:require_login()
     except Unauthorized:
         if request.method=='GET' and 'text/html' in request.headers.get('Accept','').lower() and not request.path.startswith('/api/'):
-            destination=next((name for name in ('pages','studio','connections','reports') if request.path=='/'+name or request.path.startswith('/'+name+'/')),'settings' if request.path.startswith('/account/') or request.path=='/control' else '')
-            return redirect('/account?mode=login'+('&next='+destination if destination else ''))
+            destination=next((name for name in ('pages','studio','connections','reports','clips') if request.path=='/'+name or request.path.startswith('/'+name+'/')),'settings' if request.path.startswith('/account/') or request.path=='/control' else '')
+            account_mode='register' if destination=='clips' else 'login'
+            return redirect('/account?mode='+account_mode+('&next='+destination if destination else ''))
         raise
     if request.method == "POST":
+        if request.path == '/clips/jobs':
+            # Raise only the authenticated video-upload limit, before parsing a form.
+            # Ordinary account, billing and caption requests retain their 64 KiB limit.
+            from clip_studio_web import upload_limit
+            request.max_content_length = upload_limit() + 1024 * 1024
         # Browser form requests must include a session CSRF token.
         if not _same_secret(
             request.headers.get("X-CSRF-Token") or request.form.get("_csrf", ""), session.get("csrf", "missing")
@@ -1120,7 +1131,7 @@ button.secondary{background:#2f4050;color:white}
 @app.route("/manifest.webmanifest")
 def manifest():
     return jsonify({"id": "/", "name": "Auto Poster AI", "short_name": "Auto Poster",
-                    "start_url": "/", "display": "standalone",
+                    "scope": "/", "start_url": "/launch?source=installed", "display": "standalone",
                     "background_color": "#0b1424", "theme_color": "#0b1424",
                     "icons": [
                         {"src": "/static/brand/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
@@ -1280,6 +1291,10 @@ from account_support import account_support_bp
 app.register_blueprint(account_support_bp)
 from business_help import help_bp
 app.register_blueprint(help_bp)
+from pwa import pwa_bp
+app.register_blueprint(pwa_bp)
+from clip_studio_web import clip_bp
+app.register_blueprint(clip_bp)
 
 
 def start():

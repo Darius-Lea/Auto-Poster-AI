@@ -1,8 +1,8 @@
-"""Production WSGI entry point for the isolated Auto Poster AI starter.
+"""Production WSGI entry point for Auto Poster AI.
 
 Run one Gunicorn worker to avoid duplicate scheduler loops. This prototype's
-SQLite database requires persistent storage. Do not offer as a public multi-user
-service until authentication, isolation and durable queue are upgraded.
+SQLite database and Clip Studio media require persistent storage. This entry
+point starts the publishing and clip schedulers; never use multiple workers.
 """
 import os
 import secrets

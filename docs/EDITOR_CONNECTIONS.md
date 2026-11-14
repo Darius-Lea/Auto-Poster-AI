@@ -10,7 +10,7 @@ Server settings (the operator supplies these in hosting secrets):
 
 - `CANVA_CLIENT_ID`
 - `CANVA_CLIENT_SECRET`
-- `CANVA_REDIRECT_URI` — the exact public HTTPS callback registered in Canva, e.g. `https://app.example.com/creative/canva/callback`
+- `CANVA_REDIRECT_URI` — the exact public HTTPS callback registered in Canva, e.g. `https://app.example.com/connections/canva/callback`
 - `AUTOPOST_CONNECTOR_SECRET` — a stable, random encryption secret of at least 32 characters. The existing `META_PAGES_ENCRYPTION_SECRET` is a supported fallback. Changing this key requires an explicit token migration or account reconnection.
 
 Requested scopes are `design:content:read`, `design:content:write` and `design:meta:read`. Canva application review, the enabled scopes and the connected account's eligible plan still determine availability. Nothing in these local tests establishes public Canva app approval.

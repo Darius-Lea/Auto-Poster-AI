@@ -188,6 +188,7 @@ _EXPORT_TABLES={
  'analytics_reports':('id','text','provider','model','created_at'),
  'website_requests':('id','url','topic','cadence','status','created_at'),
  'subscriptions':('status','plan','current_period_end'),
+ 'clip_jobs':('id','status','created','updated','source_duration','options_json','summary_json','error','caption_revision'),
 }
 
 
@@ -244,13 +245,18 @@ def delete_customer(user,password,confirmation):
     if confirmation!='DELETE':raise ValueError('Type DELETE to confirm account removal.')
     if not customer_accounts.verify_password(user['id'],password):raise ValueError('Your current password did not match.')
     clearance=_checkout_clearance(user)
-    ws=user['workspace_id'];now=int(time.time())
+    ws=user['workspace_id'];now=int(time.time());clip_identifiers=[]
     with customer_accounts.connect() as c:
         c.execute('BEGIN IMMEDIATE')
         current=c.execute('SELECT auth_version FROM customer_accounts WHERE id=? AND workspace_id=?',(user['id'],ws)).fetchone()
         if not current or current['auth_version']!=user['auth_version']:
             raise ValueError('Your account changed during this request. Sign in again before deleting.')
         existing={r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if 'clip_jobs' in existing:
+            clips=c.execute('SELECT id,status FROM clip_jobs WHERE workspace_id=?',(ws,)).fetchall()
+            if any(r['status'] in ('uploading','queued','rendering') for r in clips):
+                raise ValueError('Wait for video renders to finish, or delete queued clips in Clip Studio, before deleting your account.')
+            clip_identifiers=[r['id'] for r in clips]
         if 'subscriptions' in existing:
             sub=c.execute('SELECT status FROM subscriptions WHERE workspace_id=?',(ws,)).fetchone()
             if sub and sub['status'] not in ('canceled','cancelled','incomplete_expired'):
@@ -283,6 +289,13 @@ def delete_customer(user,password,confirmation):
         c.execute('DELETE FROM customer_password_resets WHERE user_id=?',(user['id'],))
         c.execute('DELETE FROM customer_email_verifications WHERE user_id=?',(user['id'],))
         c.execute('DELETE FROM customer_accounts WHERE id=? AND workspace_id=?',(user['id'],ws))
+    # File cleanup follows the committed account/workspace deletion. Pending
+    # jobs were excluded under the same SQLite write lock as their deletion.
+    if clip_identifiers:
+        import shutil
+        from clip_studio_web import job_dir
+        for identifier in clip_identifiers:
+            shutil.rmtree(job_dir(identifier),ignore_errors=True)
     return True
 
 
