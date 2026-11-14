@@ -1,0 +1,12 @@
+# Clip Studio feature dependencies (features/clip_studio/).
+# Install alongside the main requirements only when using Clip Studio:
+#     pip install -r requirements.txt -r requirements-clip.txt
+# These are exactly the third-party packages the bundled clip engine
+# imports: faster-whisper (transcription), yt-dlp (video downloads),
+# opencv-python-headless (face detection), Pillow (titles/captions),
+# numpy (audio/image math). Everything else is Python's standard library.
+faster-whisper>=1.0
+yt-dlp>=2024.8.6
+opencv-python-headless>=4.8
+Pillow>=10.0
+numpy>=1.26

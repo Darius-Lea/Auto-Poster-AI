@@ -8,3 +8,7 @@ __pycache__/
 *.db
 *.sqlite
 dump_*.html
+# Clip Studio feature: render outputs, web-UI data, engine work dirs
+features/clip_studio/renders/
+features/clip_studio/data/
+features/clip_studio/engine/runs/

@@ -51,6 +51,18 @@ to publish fresh photos in groups of up to ten, including previously individual
 test bookings. It retains each person's status tracking, then allows the normal
 individual schedule to resume. Keep the delivery caches; do not reset them.
 
+## Clip Studio
+
+Clip Studio is an Auto Poster feature that turns a podcast episode — a
+local file or a video URL — into a finished vertical clip (hook,
+captions, speaker framing, loudness-normalized, face-checked) and hands
+it into the same `outbox/` queue this pipeline publishes from, with its
+caption built from the clip's hook. It ships with its own engine,
+per-client brand kits, style registers, editable captions, and a
+standalone local web UI. Its extra dependencies live in
+`requirements-clip.txt`, separate from the main pipeline's. See
+[features/clip_studio/README.md](features/clip_studio/README.md).
+
 Booking captions include: *All individuals are presumed innocent until proven guilty.*
 Daily roster status notes can follow the original caption.
 Review each source's terms of use and your local laws on publishing booking photos before going live.
