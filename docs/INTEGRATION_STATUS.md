@@ -1,5 +1,7 @@
 # Integration evidence and customer flow — November 14, 2026
 
+> Historical baseline: see [current integrated release status](MARKET_RELEASE_2026-11-14.md) for the later shared-account, logo, link-import and video-publishing changes.
+
 The new integration identified for this release is **Clip Studio**, imported from `feature/clip-studio`. A provider appearing on the Connections page means only the capability described there. Configuration, stored authorization, read-only API access and a successful customer workflow are separate evidence.
 
 | Integration | Implemented workflow | What still needs live verification |

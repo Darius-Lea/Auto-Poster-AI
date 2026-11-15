@@ -293,3 +293,98 @@ def publish_message(workspace_id: str, page_id: str, message: str):
     token = get_page_token(workspace_id, page_id)
     return "meta:" + FacebookClient(page_id, token,
                   os.getenv("META_GRAPH_VERSION", "v26.0")).publish_message(message)
+
+
+def _video_version():
+    version = os.getenv('META_GRAPH_VERSION', 'v26.0')
+    if not re.fullmatch(r'v[1-9][0-9]?\.[0-9]+', version):
+        raise RuntimeError('The service operator must configure a valid Meta API version.')
+    return version
+
+
+class _VideoMultipart:
+    """Bounded multipart iterator: do not buffer a complete video in memory."""
+    def __init__(self, handle, size, description):
+        self.handle = handle
+        self.boundary = 'autoposter' + secrets.token_hex(16)
+        self.header = (
+            '--' + self.boundary + '\r\nContent-Disposition: form-data; name="description"\r\n\r\n'
+            + description + '\r\n--' + self.boundary
+            + '\r\nContent-Disposition: form-data; name="published"\r\n\r\ntrue\r\n--'
+            + self.boundary + '\r\nContent-Disposition: form-data; name="source"; filename="clip.mp4"'
+            + '\r\nContent-Type: video/mp4\r\n\r\n').encode('utf-8')
+        self.footer = ('\r\n--' + self.boundary + '--\r\n').encode('ascii')
+        self.length = len(self.header) + size + len(self.footer)
+
+    def __len__(self):
+        return self.length
+
+    def __iter__(self):
+        yield self.header
+        while chunk := self.handle.read(256 * 1024):
+            yield chunk
+        yield self.footer
+
+
+def publish_video(workspace_id: str, page_id: str, path, description: str):
+    """Upload one reviewed Page video; an ID means accepted, not published.
+
+    The caller owns idempotency and must never automatically retry an uncertain
+    POST. Status is confirmed separately with get_video_status(). This uses the
+    official Page /videos source/description/published fields and a scoped Page
+    token. It never falls back to the legacy owner's environment credentials.
+    """
+    import app_control
+    from pathlib import Path
+    if os.getenv('AUTOPOST_PREVIEW_MODE', 'false').lower() == 'true':
+        raise PermissionError('Video publishing stays off in preview mode.')
+    if not app_control.allowed(workspace_id=workspace_id) or app_control.publishing_paused(workspace_id):
+        raise PermissionError('Publishing is paused or your subscription is not active.')
+    if not isinstance(description, str) or len(description) > 10000:
+        raise ValueError('Keep the video caption under 10,000 characters.')
+    source = Path(path)
+    if not source.is_file() or source.is_symlink() or not 0 < source.stat().st_size <= 200 * 1024 * 1024:
+        raise ValueError('Choose a finished, nonempty clip under 200 MB.')
+    token = get_page_token(workspace_id, page_id)
+    url = 'https://graph-video.facebook.com/' + _video_version() + '/' + page_id + '/videos'
+    try:
+        with source.open('rb') as handle:
+            body = _VideoMultipart(handle, source.stat().st_size, description)
+            response = requests.post(url, data=body, headers={
+                'Authorization': 'Bearer ' + token,
+                'Content-Type': 'multipart/form-data; boundary=' + body.boundary,
+            }, timeout=(10, 120), allow_redirects=False)
+        if response.status_code != 200:
+            raise RuntimeError('Facebook did not confirm the video upload. Check your Page before trying another upload.')
+        payload = response.json()
+        identifier = payload.get('id') if isinstance(payload, dict) else None
+        if not isinstance(identifier, str) or not PAGE_ID.fullmatch(identifier):
+            raise RuntimeError('Facebook did not return a valid video reference. Check your Page before trying another upload.')
+        return identifier
+    except (requests.RequestException, ValueError, OSError):
+        # Exception strings/response bodies may contain credentials or paths.
+        raise RuntimeError('Facebook did not confirm the video upload. Check your Page before trying another upload.') from None
+
+
+def get_video_status(workspace_id: str, page_id: str, video_id: str):
+    """Read-only confirmation using the same workspace's Page authorization."""
+    if not isinstance(video_id, str) or not PAGE_ID.fullmatch(video_id):
+        raise ValueError('Choose a valid video reference.')
+    token = get_page_token(workspace_id, page_id)
+    data = _get_json('https://graph.facebook.com/' + _video_version() + '/' + video_id,
+                     params={'fields': 'id,status,published,permalink_url'}, token=token)
+    if data.get('id') != video_id or not isinstance(data.get('status'), dict):
+        raise RuntimeError('Facebook has not returned a usable video status. Check the Page.')
+    phase = data['status'].get('video_status')
+    failed = phase in ('error', 'failed')
+    for key in ('processing_phase', 'publishing_phase', 'uploading_phase'):
+        detail = data['status'].get(key)
+        if isinstance(detail, dict) and detail.get('status') in ('error', 'failed'):
+            failed = True
+    published = phase == 'ready' and data.get('published') is True
+    # A provider permalink is optional and never used for a server request.
+    permalink = data.get('permalink_url')
+    if not isinstance(permalink, str) or not permalink.startswith('https://www.facebook.com/'):
+        permalink = None
+    return {'id': video_id, 'published': published, 'failed': failed,
+            'processing': not published and not failed, 'permalink_url': permalink}

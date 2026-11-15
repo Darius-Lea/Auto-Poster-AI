@@ -194,7 +194,7 @@ def _excluded(values):
     return set(values)
 
 
-def check_schedule(workspace_id, targets, due_at, exclude_post_ids=None):
+def check_schedule(workspace_id, targets, due_at, exclude_post_ids=None, *, exclude_clip_ids=None):
     """Reject conflicting active schedules; reserve_delivery is the final atomic gate."""
     if not limits(workspace_id)["basic"]:
         return True
@@ -203,6 +203,7 @@ def check_schedule(workspace_id, targets, due_at, exclude_post_ids=None):
     if not platforms:
         return True
     excluded = _excluded(exclude_post_ids)
+    excluded_clips = _excluded(exclude_clip_ids)
     day = _date(due_at).date().isoformat()
     with _connect() as connection:
         _init(connection)
@@ -211,12 +212,16 @@ def check_schedule(workspace_id, targets, due_at, exclude_post_ids=None):
                                   (workspace_id, day)).fetchall()
         reserved = connection.execute("SELECT post_id,platform FROM plan_delivery_reservations WHERE workspace_id=? AND utc_day=?",
                                       (workspace_id, day)).fetchall()
+        clip_rows = connection.execute("SELECT id,status FROM clip_publish_jobs WHERE workspace_id=? AND date(due_at)=?", (workspace_id, day)).fetchall() if connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='clip_publish_jobs'").fetchone() else []
     for row in rows:
         if row["id"] not in excluded and row["status"] in _ACTIVE and _platform(row["platform"]) in platforms:
             raise PlanLimitError("Basic already has a post for this platform on this date (UTC). Choose another day or change your plan.")
     for row in reserved:
-        if row["post_id"] not in excluded and row["platform"] in platforms:
+        excluded_reservation = row['post_id'] in excluded or (row['post_id'] < 0 and -row['post_id'] in excluded_clips)
+        if not excluded_reservation and row["platform"] in platforms:
             raise PlanLimitError("Today's publishing allowance for this platform is already used or awaiting confirmation (UTC).")
+    if 'facebook' in platforms and any(row['id'] not in excluded_clips and row['status'] in ('scheduled','sending','processing','published','needs_review','quota_held') for row in clip_rows):
+        raise PlanLimitError('Basic already has a video post for Facebook on this date (UTC). Choose another day or change your plan.')
     return True
 
 
@@ -227,6 +232,15 @@ def reserve_delivery(workspace_id, post_id, platform, page_id=None, now=None):
     enforce their sending/needs_review state machine to prevent duplicate sends.
     A failure or uncertain response never frees the reservation automatically.
     """
+    return _reserve_delivery(workspace_id, post_id, platform, page_id, now, clip=False)
+
+
+def reserve_clip_delivery(workspace_id, clip_publish_id, page_id, now=None):
+    """Share Facebook's atomic daily allowance using a separate negative ID space."""
+    return _reserve_delivery(workspace_id, clip_publish_id, 'facebook', page_id, now, clip=True)
+
+
+def _reserve_delivery(workspace_id, post_id, platform, page_id, now, *, clip):
     entitlement = limits(workspace_id)
     normalized = _platform(platform)
     if not entitlement["basic"] or normalized == "draft":
@@ -235,19 +249,21 @@ def reserve_delivery(workspace_id, post_id, platform, page_id=None, now=None):
         raise PlanLimitError("Choose a valid post for publication.")
     moment = _date(now)
     day = moment.date().isoformat()
+    reservation_id = -post_id if clip else post_id
     with _connect() as connection:
         _init(connection)
         _post_schema(connection)
         connection.execute("BEGIN IMMEDIATE")
         try:
-            post = connection.execute("SELECT * FROM app_posts WHERE id=? AND workspace_id=?", (post_id, workspace_id)).fetchone()
-            if not post or _platform(post["platform"]) != normalized or post["page_id"] != page_id:
+            table = 'clip_publish_jobs' if clip else 'app_posts'
+            post = connection.execute('SELECT * FROM '+table+' WHERE id=? AND workspace_id=?', (post_id, workspace_id)).fetchone()
+            if not post or (not clip and _platform(post["platform"]) != normalized) or post["page_id"] != page_id:
                 raise PlanLimitError("This post does not belong to the selected account or Page.")
             if normalized == "facebook" and page_id:
                 connected = _connected_page_ids(connection, workspace_id)
                 if connected != {page_id}:
                     raise PlanLimitError("Basic requires one connected Facebook posting Page. Review your Page connections before publishing.")
-            previous = connection.execute("SELECT * FROM plan_delivery_reservations WHERE workspace_id=? AND post_id=?", (workspace_id, post_id)).fetchone()
+            previous = connection.execute("SELECT * FROM plan_delivery_reservations WHERE workspace_id=? AND post_id=?", (workspace_id, reservation_id)).fetchone()
             if previous:
                 if previous["platform"] != normalized or previous["page_id"] != page_id:
                     raise PlanLimitError("This delivery identity is already assigned to another destination.")
@@ -258,7 +274,7 @@ def reserve_delivery(workspace_id, post_id, platform, page_id=None, now=None):
             if spent:
                 raise PlanLimitError("Basic allows one post per platform per day (UTC). This platform's allowance is already used or awaiting confirmation.")
             connection.execute("INSERT INTO plan_delivery_reservations VALUES(?,?,?,?,?,?)",
-                               (workspace_id, normalized, day, post_id, page_id, int(moment.timestamp())))
+                               (workspace_id, normalized, day, reservation_id, page_id, int(moment.timestamp())))
             connection.commit()
             return {"allowed": True, "exempt": False, "reserved": True,
                     "already_reserved": False, "platform": normalized, "day": day}

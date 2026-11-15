@@ -1,0 +1,44 @@
+# Opt-in customer web service. The original publisher in render.yaml is unchanged.
+# This creates a separate service; migrate existing service/database deliberately.
+services:
+  - type: web
+    name: auto-poster-ai-app
+    runtime: docker
+    repo: https://github.com/Darius-Lea/Auto-Poster-AI
+    branch: feature/saas-appstore-foundation-2026-11
+    dockerfilePath: ./Dockerfile.app
+    plan: standard
+    healthCheckPath: /version
+    disk:
+      name: auto-poster-customer-state
+      mountPath: /var/lib/autoposter
+      sizeGB: 20
+    envVars:
+      - key: AUTOPOST_WEB_SECRET
+        generateValue: true
+      - key: AUTOPOST_COOKIE_SECURE
+        value: "true"
+      - key: AUTOPOST_WEB_DB
+        value: /var/lib/autoposter/app.db
+      - key: AUTOPOST_CLIP_DATA_DIR
+        value: /var/lib/autoposter/clip-data
+      - key: AUTOPOST_CLIP_MODEL_CACHE
+        value: /var/lib/autoposter/models/clip-studio
+      - key: HF_HOME
+        value: /var/lib/autoposter/models
+      - key: AUTOPOST_CUSTOMER_SIGNUP_ENABLED
+        value: "true"
+      - key: AUTOPOST_PUBLIC_LANDING
+        value: "true"
+      - key: AUTOPOST_REQUIRE_PAYMENT
+        value: "true"
+      - key: AUTOPOST_PUBLIC_SALES_ENABLED
+        value: "false"
+      - key: AUTOPOST_CLIP_ENABLED
+        value: "false"
+      - key: AUTOPOST_CLIP_MODEL
+        value: base.en
+      - key: AUTOPOST_CLIP_WARM_ON_START
+        value: "false"
+      - key: META_PAGES_ENCRYPTION_SECRET
+        generateValue: true

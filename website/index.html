@@ -22,7 +22,7 @@
 *{box-sizing:border-box}body{background:var(--bg);color:var(--ink);margin:0;line-height:1.55}a{color:inherit;text-decoration:none}button{font:inherit}img{max-width:100%}
 .wrap{max-width:1170px;margin:auto;padding:0 24px}.nav{position:sticky;top:0;z-index:20;border-bottom:1px solid #ffffff17;background:#0b1220ee;backdrop-filter:blur(18px)}
 .nav-inner{height:76px;display:flex;align-items:center;justify-content:space-between;gap:18px}.brand{display:flex;align-items:center;gap:11px;font-size:18px;font-weight:850;letter-spacing:-.6px;white-space:nowrap}.logo{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(145deg,#324b75,#152338);color:var(--lime);font-size:24px;box-shadow:inset 0 0 0 1px #7996ba55}
-.nav-links{display:flex;align-items:center;gap:26px}.nav-links a:not(.btn){font-weight:600;color:#cad4e1;font-size:14px}.nav-links a:hover,.foot a:hover{color:var(--lime)}.nav-toggle{display:none;border:1px solid var(--line);border-radius:10px;background:var(--card);padding:9px;color:var(--ink);cursor:pointer}
+.nav-links{display:flex;align-items:center;gap:16px}.nav-links a:not(.btn){font-weight:600;color:#cad4e1;font-size:14px}.nav-links a:hover,.foot a:hover{color:var(--lime)}.nav-toggle{display:none;border:1px solid var(--line);border-radius:10px;background:var(--card);padding:9px;color:var(--ink);cursor:pointer}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;padding:13px 19px;min-height:45px;border-radius:11px;font-weight:750;font-size:14px;white-space:nowrap;border:1px solid transparent;background:var(--lime);color:#182617;transition:transform .15s ease,box-shadow .15s ease}
 .btn:hover{transform:translateY(-1px);box-shadow:0 8px 32px #c5fb8622}.btn.outline{background:#ffffff0a;color:var(--ink);border-color:var(--line)}
 .hero{position:relative;overflow:hidden;padding:104px 0 115px;background:radial-gradient(ellipse at 75% 27%,#28678a3d,transparent 42%),radial-gradient(ellipse at 20% 60%,#437a4c2b,transparent 45%)}
@@ -43,6 +43,7 @@ h1{font-size:clamp(43px,5.4vw,72px);letter-spacing:-3.5px;line-height:1.08;margi
 @media(max-width:650px){.wrap{padding:0 17px}.nav-inner{height:67px}.nav-toggle{display:block}.nav-links{display:none;position:absolute;top:67px;left:0;right:0;flex-direction:column;align-items:stretch;padding:18px;background:var(--bg2);border-bottom:1px solid var(--line);gap:17px}.nav-links.open{display:flex}.hero{padding:63px 0}.hero h1{letter-spacing:-2.2px}.hero p{font-size:16px}.canvas{padding:8px;transform:none}.app{padding:15px;min-height:350px}.metrics strong{font-size:17px}.metrics>div{padding:12px 3px}.section{padding:65px 0}.cards,.steps,.pricing{grid-template-columns:1fr}.step{min-height:0}.strip{padding:27px;display:block}.strip .btn{margin-top:20px}.foot-inner{display:block}.foot nav{margin-top:20px}.plan{min-height:0}}
 @media(prefers-reduced-motion:reduce){:root{scroll-behavior:auto}.btn{transition:none}}
 .brand-hero{margin:0;min-width:0;position:relative;border:1px solid #385368;border-radius:28px;background:radial-gradient(circle at 50% 45%,#2d5b5144,transparent 67%),#0d1b2a;overflow:hidden;box-shadow:0 28px 90px #02091466}.brand-hero-art{display:block;width:100%;height:auto;aspect-ratio:1;object-fit:contain}.brand-hero figcaption{position:relative;display:flex;align-items:center;justify-content:center;gap:15px;padding:0 18px 23px;color:#c3d9cf;font-size:10px;font-weight:750;letter-spacing:2px}.brand-hero figcaption>span:not(.brand-hero-line){color:#678c87}.brand-hero-line{display:inline-block;width:22px;height:2px;background:var(--lime)}@media(max-width:980px){.brand-hero{max-width:580px;justify-self:center;width:100%}}@media(max-width:650px){.brand-hero{border-radius:21px}.brand-hero figcaption{font-size:9px;gap:10px;padding-bottom:18px}}
+@media(max-width:980px){.nav-toggle{display:block}.nav-links{display:none;position:absolute;top:100%;left:0;right:0;flex-direction:column;align-items:stretch;padding:18px;background:var(--bg2);border-bottom:1px solid var(--line);gap:17px}.nav-links.open{display:flex}}
 </style>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png" sizes="180x180">
@@ -83,17 +84,25 @@ h1{font-size:clamp(43px,5.4vw,72px);letter-spacing:-3.5px;line-height:1.08;margi
 <a class="brand" href="#top" aria-label="Auto Poster AI home"><img class="brand-icon" src="/static/brand/mark.svg" width="40" height="40" alt=""><span>Auto Poster <span style="color:var(--lime)">AI</span></span></a>
 <button class="nav-toggle" id="menu" type="button" aria-controls="links" aria-expanded="false" aria-label="Toggle menu"><svg class="icon"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
 <div class="nav-links" id="links">
-<a href="/install">Install app</a><a href="#features">Features</a><a href="#how">How it works</a><a href="#pricing">Pricing</a><a href="#questions">FAQ</a>
-<a class="btn outline" href="/start">Start for free</a>
+<a href="/install">Install app</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="/account?mode=login">Sign in</a>
+<a class="btn" href="/account?mode=register">Create account</a><a class="btn outline" href="/start">Start for free</a>
 </div>
 </div></nav>
 <main>
 <section class="hero" id="top"><div class="wrap hero-grid">
 <div><div class="eyebrow"><svg class="icon icon-lg" aria-hidden="true"><use href="#ico-sparkles"/></svg> Make more. Manage less.</div>
 <h1>Good content.<br><span>A simpler start.</span></h1>
+{% if clip_available %}
 <p>Make a branded video clip from a video you own, or turn your business idea into a first week of posts. Start with one useful piece of content, then decide where to share it.</p>
-<div class="actions"><a class="btn" href="/clips">Make my first clip <span aria-hidden="true">→</span></a><a class="btn outline" href="/launch">Build my first plan <span aria-hidden="true">→</span></a></div><p><a href="/clips/example" style="text-decoration:underline">Watch a finished example clip</a> · <a href="/start" style="text-decoration:underline">Set up a text post</a></p>
-<div class="tiny">Watch the example or build a plan without an account. Sign in to save your work and make a clip when rendering is available. You review before sharing; views and earnings are never guaranteed.</div>
+<div class="actions"><a class="btn" href="/clips">Make my first clip <span aria-hidden="true">→</span></a><a class="btn outline" href="/launch">Build my first plan <span aria-hidden="true">→</span></a></div>
+<p><a href="/clips/example" style="text-decoration:underline">Watch a finished example clip</a> · <a href="/start" style="text-decoration:underline">Set up a text post</a></p>
+{% else %}
+<p>Have a business idea? Answer a few simple questions and get a first week of posts you can change in your own words. You can begin without an email, password or card.</p>
+<div class="actions"><a class="btn" href="/launch">Build my first plan <span aria-hidden="true">→</span></a><a class="btn outline" href="/clips/example">Watch a finished example clip</a></div>
+<p class="tiny">Clip Studio is being prepared. You can still build your plan and watch an example today.</p>
+<p><a href="/start" style="text-decoration:underline">Set up a text post</a></p>
+{% endif %}
+<p class="tiny">Already have an account? <a href="/account?mode=login" style="text-decoration:underline">Sign in</a>. New here? <a href="/account?mode=register" style="text-decoration:underline">Create your own account</a>. One login covers your posts, Clip Studio and saved logo.</p><div class="tiny">Watch the example or build a plan without an account. Sign in to save your work and make a clip when rendering is available. You review before sharing; views and earnings are never guaranteed.</div>
 </div>
 <figure class="brand-hero" aria-label="Auto Poster AI publishing illustration">
 <img class="brand-hero-art" src="/static/brand/publishing-orbit.png" alt="" width="1024" height="1024" fetchpriority="high" decoding="async">
@@ -119,12 +128,12 @@ h1{font-size:clamp(43px,5.4vw,72px);letter-spacing:-3.5px;line-height:1.08;margi
 </div>
 </div></section>
 <section class="section" id="pricing"><div class="wrap">
-<div class="center"><div class="eyebrow">Clear monthly plans</div><h2 class="section-title">Set up free. Activate on your terms.</h2><p class="lead">Start small. Upgrade when you need more channels, workflows and capacity.</p></div>
+<div class="center"><div class="eyebrow">Proposed plans</div><h2 class="section-title">Build your plan free today.</h2><p class="lead">These subscription plans are being prepared. They are not current purchase offers. You can start a marketing plan without a card.</p></div>
 <div class="pricing">
 <article class="plan featured"><h3>Basic</h3><div class="who">For your first connected pages</div><div class="price">$10.99 <small>/ month</small></div><ul><li>1 posting Page per platform</li><li>Post across supported platforms together</li><li>1 post per platform per day</li><li>Basic reporting</li></ul><a href="/start" class="btn">Start free setup</a></article>
-<article class="plan"><h3>Creator</h3><div class="who">For consistent creators</div><div class="price">$29.99 <small>/ month</small></div><ul><li>Up to 5 accounts</li><li>3 workflows</li><li>Up to 250 monthly posts</li><li>Growth Coach insights</li></ul><a href="/start" class="btn outline">Start free setup</a></article>
-<article class="plan"><h3>Business</h3><div class="who">For busy brands and teams</div><div class="price">$69.99 <small>/ month</small></div><ul><li>Up to 10 accounts</li><li>10 workflows</li><li>Up to 1,000 monthly posts</li><li>Team review and reporting</li></ul><a href="/start" class="btn outline">Start free setup</a></article>
-<article class="plan"><h3>Agency</h3><div class="who">For managing multiple clients</div><div class="price">$149.99 <small>/ month</small></div><ul><li>Up to 25 accounts</li><li>Client workspaces</li><li>Up to 2,500 monthly posts</li><li>Client reports and approvals</li></ul><a href="/start" class="btn outline">Start free setup</a></article>
+<article class="plan"><h3>Creator</h3><div class="who">For consistent creators</div><div class="price">$29.99 <small>/ month</small></div><ul><li>Up to 5 accounts</li><li>3 workflows</li><li>Posting capacity to be finalized</li><li>Saved writing and brand preferences</li></ul><a href="/start" class="btn outline">Start free setup</a></article>
+<article class="plan"><h3>Business</h3><div class="who">For busy brands and teams</div><div class="price">$69.99 <small>/ month</small></div><ul><li>Up to 10 accounts</li><li>10 workflows</li><li>Posting capacity to be finalized</li><li>Writing assistance when connected</li></ul><a href="/start" class="btn outline">Start free setup</a></article>
+<article class="plan"><h3>Agency</h3><div class="who">For managing multiple clients</div><div class="price">$149.99 <small>/ month</small></div><ul><li>Up to 25 accounts</li><li>Reusable business branding</li><li>Posting capacity to be finalized</li><li>Review before publishing</li></ul><a href="/start" class="btn outline">Start free setup</a></article>
 </div>
 <p class="price-note"><b>No login is required to start.</b> Choose your platforms, write content and create a schedule in the free setup wizard. Your plan stays on your device until you choose to sign in and transfer it. Create your account to keep your plans in your own workspace. Proposed pricing and limits are not active checkout offerings.</p>
 </div></section>

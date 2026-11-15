@@ -1,4 +1,4 @@
-"""Authenticated local-upload Clip Studio. No legacy publisher or remote URLs."""
+"""Private video creation, background imports and reviewed video delivery."""
 from __future__ import annotations
 
 import importlib.util
@@ -59,19 +59,22 @@ def init():
           CREATE TABLE IF NOT EXISTS clip_daily_usage(
           workspace_id TEXT NOT NULL,day TEXT NOT NULL,count INTEGER NOT NULL,
           PRIMARY KEY(workspace_id,day));''')
+        columns={row[1] for row in c.execute('PRAGMA table_info(clip_jobs)')}
+        if 'source_url' not in columns:
+            c.execute("ALTER TABLE clip_jobs ADD COLUMN source_url TEXT NOT NULL DEFAULT ''")
 
 
 def recover_interrupted():
     """Single-worker startup: hold interrupted work as failed, never retry it."""
     init()
     with connect() as c:
-        c.execute("UPDATE clip_jobs SET status='failed',error='This operation was interrupted. Create a new clip to try again.',updated=? WHERE status IN ('uploading','rendering')", (int(time.time()),))
+        c.execute("UPDATE clip_jobs SET status='failed',error='This operation was interrupted. Create a new clip to try again.',updated=? WHERE status IN ('uploading','importing','rendering')", (int(time.time()),))
 
 
 def renderer_readiness():
     enabled = os.getenv('AUTOPOST_CLIP_ENABLED', 'false').lower() == 'true'
     if not enabled:
-        return {'enabled': False, 'ready': False, 'message': 'Clip rendering is not enabled on this service yet. Your other drafts and automations remain available.'}
+        return {'enabled': False, 'ready': False, 'message': 'Video creation is being prepared. You can plan posts, save your logo and watch an example today.'}
     missing = [name for name in ('ffmpeg', 'ffprobe') if not shutil.which(name)]
     for module in ('faster_whisper', 'cv2', 'PIL', 'numpy'):
         try:
@@ -80,8 +83,11 @@ def renderer_readiness():
             found = False
         if not found:
             missing.append(module)
-    return {'enabled': True, 'ready': not missing,
-            'message': 'Ready for local video uploads. The first transcription may need the service to download its speech model.' if not missing else 'The service operator must finish installing the video renderer before you can upload.'}
+    if missing:
+        return {'enabled':True,'ready':False,'message':'Video creation is temporarily unavailable. Your drafts and saved business look are available.'}
+    from features.clip_studio.speech_model import speech_model_status
+    speech=speech_model_status()
+    return {'enabled':True,'ready':speech['ready'],'message':'Ready to turn your video into a captioned clip.' if speech['ready'] else 'Video creation is being prepared. You can plan posts, save your logo and watch an example today.'}
 
 
 def actor():
@@ -175,7 +181,7 @@ def _options(form):
     return options
 
 
-def _reserve(workspace, extension, options, source_duration=0, revision=0):
+def _reserve(workspace, extension, options, source_duration=0, revision=0, source_url=''):
     identifier = uuid.uuid4().hex
     now = int(time.time())
     day = datetime.now(timezone.utc).date().isoformat()
@@ -185,15 +191,15 @@ def _reserve(workspace, extension, options, source_duration=0, revision=0):
             account = c.execute('SELECT email_verified FROM customer_accounts WHERE workspace_id=?', (workspace,)).fetchone()
             if not account or not account['email_verified']:
                 raise PermissionError('Sign in to a confirmed account before rendering a clip.')
-        if c.execute("SELECT COUNT(*) FROM clip_jobs WHERE workspace_id=? AND status IN ('uploading','queued','rendering')", (workspace,)).fetchone()[0] >= 2:
+        if c.execute("SELECT COUNT(*) FROM clip_jobs WHERE workspace_id=? AND status IN ('uploading','import_queued','importing','queued','rendering')", (workspace,)).fetchone()[0] >= 2:
             raise PermissionError('You already have two clips waiting or rendering. Wait for one to finish.')
-        if c.execute("SELECT COUNT(*) FROM clip_jobs WHERE status IN ('uploading','queued','rendering')").fetchone()[0] >= 10:
+        if c.execute("SELECT COUNT(*) FROM clip_jobs WHERE status IN ('uploading','import_queued','importing','queued','rendering')").fetchone()[0] >= 10:
             raise PermissionError('The renderer is busy. Try again after a clip finishes.')
         usage = c.execute('SELECT count FROM clip_daily_usage WHERE workspace_id=? AND day=?', (workspace, day)).fetchone()
         if usage and usage['count'] >= 3:
             raise PermissionError('You have used today’s three clip renders. You can still download or delete completed clips.')
-        c.execute('INSERT INTO clip_jobs(id,workspace_id,status,created,updated,source_ext,source_duration,options_json,caption_revision) VALUES(?,?,?,?,?,?,?,?,?)',
-                  (identifier, workspace, 'uploading', now, now, extension, source_duration, json.dumps(options), revision))
+        c.execute('INSERT INTO clip_jobs(id,workspace_id,status,created,updated,source_ext,source_duration,options_json,caption_revision,source_url) VALUES(?,?,?,?,?,?,?,?,?,?)',
+                  (identifier, workspace, 'uploading', now, now, extension, source_duration, json.dumps(options), revision, source_url))
         c.execute('INSERT INTO clip_daily_usage VALUES(?,?,1) ON CONFLICT(workspace_id,day) DO UPDATE SET count=count+1', (workspace, day))
     folder = job_dir(identifier)
     try:
@@ -210,14 +216,15 @@ def _fail(identifier, message):
         c.execute("UPDATE clip_jobs SET status='failed',error=?,updated=? WHERE id=?", (message, int(time.time()), identifier))
 
 
-def _validation_failed(identifier, message):
+def _validation_failed(identifier, message, *, importing=False):
     """Refund only an unqueued reservation, once; rendering failures retain usage."""
     with connect() as c:
         c.execute('BEGIN IMMEDIATE')
-        row = c.execute("SELECT workspace_id,created FROM clip_jobs WHERE id=? AND status='uploading'", (identifier,)).fetchone()
+        state='importing' if importing else 'uploading'
+        row = c.execute('SELECT workspace_id,created FROM clip_jobs WHERE id=? AND status=?', (identifier,state)).fetchone()
         if not row:
             return
-        c.execute("UPDATE clip_jobs SET status='failed',error=?,updated=? WHERE id=? AND status='uploading'", (message, int(time.time()), identifier))
+        c.execute('UPDATE clip_jobs SET status=\'failed\',error=?,source_url=\'\',updated=? WHERE id=? AND status=?', (message, int(time.time()), identifier,state))
         day = datetime.fromtimestamp(row['created'], timezone.utc).date().isoformat()
         c.execute('UPDATE clip_daily_usage SET count=MAX(0,count-1) WHERE workspace_id=? AND day=?', (row['workspace_id'], day))
 
@@ -236,9 +243,19 @@ def studio():
     import creative_jobs
     from app_mvp import preview_mode
     unavailable = _can_render()
+    import account_support
+    needs_verification=bool(unavailable and unavailable[1]==403)
+    render_notice=unavailable[0] if unavailable else ''
+    if needs_verification and not account_support.mail_configured():
+        needs_verification=False
+        render_notice='Account confirmation is being prepared on this service. You can still build a plan, save drafts and add your logo.'
+    import meta_accounts, video_sources, clip_branding
+    brand=clip_branding.get_profile(workspace)
     return render_template('clip_studio.html', csrf=session['csrf'], readiness=renderer_readiness(), preview_mode=preview_mode(),
+                           clip_config={'pages':[{'page_id':p['page_id'],'name':p['name']} for p in meta_accounts.list_pages(workspace) if p.get('can_publish')]},
+                           link_capabilities=video_sources.capabilities(), brand_profile=brand,
                            business_name=creative_jobs.get_profile(workspace).get('name', ''), can_render=not unavailable,
-                           render_notice=unavailable[0] if unavailable else '', needs_verification=bool(unavailable and unavailable[1] == 403))
+                           render_notice=render_notice, needs_verification=needs_verification)
 
 
 @clip_bp.route('/clips/example')
@@ -266,12 +283,28 @@ def jobs():
         return jsonify(error='Confirm you own this video or have permission to edit and use it.'), 400
     upload = request.files.get('video')
     extension = Path(upload.filename or '').suffix.lower() if upload else ''
-    if not upload or extension not in _EXTENSIONS or request.form.get('url') or request.form.get('source'):
-        return jsonify(error='Upload an MP4, MOV, MKV, WEBM or M4V file. Remote links and server paths are not accepted.'), 400
+    source_url=request.form.get('video_url','').strip()
+    if request.form.get('url') or request.form.get('source') or (upload and source_url):
+        return jsonify(error='Choose one video file or one supported video link.'),400
+    if not source_url and (not upload or extension not in _EXTENSIONS):
+        return jsonify(error='Choose an MP4, MOV, MKV, WEBM or M4V video, or paste a supported video link.'),400
     identifier = None
     try:
         options = _options(request.form)
-        identifier, folder = _reserve(workspace, extension, options)
+        import clip_branding, video_sources
+        if source_url:
+            source_url=video_sources.validate_import_url(source_url)
+            capabilities=video_sources.capabilities()
+            if not capabilities['direct_video']:
+                raise ValueError(capabilities['message'])
+            if source_url.startswith('https://www.youtube.com/watch?') and not capabilities.get('youtube'):
+                raise ValueError('YouTube imports are not enabled on this service. Upload your original video or use a direct video file link.')
+        identifier, folder = _reserve(workspace, extension or '.mp4', options, source_url=source_url)
+        clip_branding.snapshot_brand(workspace,folder,name=options['brand_name'],accent=options['accent'])
+        if source_url:
+            with connect() as c:
+                c.execute("UPDATE clip_jobs SET status='import_queued',updated=? WHERE id=?",(int(time.time()),identifier))
+            return jsonify(job=_public(_owned(identifier,workspace))),202
         source = folder / ('source' + extension)
         size = 0
         with source.open('xb') as output:
@@ -357,6 +390,11 @@ def captions(identifier):
         if not transcript.is_file():
             raise ValueError('This render has no reusable transcript. Create a new clip instead.')
         shutil.copyfile(transcript, folder / 'transcript.json')
+        if (original/'brand').is_dir():
+            shutil.copytree(original/'brand',folder/'brand')
+        else:
+            import clip_branding
+            clip_branding.snapshot_brand(workspace,folder,name=options.get('brand_name','Your video'),accent=options.get('accent','#A7F36A'))
         (folder / 'edited.srt').write_text(edited, encoding='utf-8')
         with connect() as c:
             c.execute("UPDATE clip_jobs SET status='queued',updated=? WHERE id=?", (int(time.time()), child))
@@ -377,8 +415,10 @@ def delete(identifier):
         row = c.execute('SELECT status FROM clip_jobs WHERE id=? AND workspace_id=?', (identifier, workspace)).fetchone()
         if not row:
             abort(404)
-        if row['status'] in ('rendering', 'uploading'):
+        if row['status'] in ('rendering', 'uploading', 'importing'):
             return jsonify(error='Wait for this operation to finish before deleting its files.'), 409
+        if c.execute("SELECT 1 FROM sqlite_master WHERE name='clip_publish_jobs'").fetchone() and c.execute("SELECT 1 FROM clip_publish_jobs WHERE workspace_id=? AND clip_id=? AND status IN ('scheduled','sending','processing')",(workspace,identifier)).fetchone():
+            return jsonify(error='Cancel pending video posts before deleting this clip.'),409
         c.execute('DELETE FROM clip_jobs WHERE id=? AND workspace_id=?', (identifier, workspace))
     shutil.rmtree(job_dir(identifier), ignore_errors=True)
     return jsonify(message='Clip and source video deleted. Today’s render allowance is unchanged.')
@@ -387,7 +427,7 @@ def delete(identifier):
 def workspace_busy(workspace):
     init()
     with connect() as c:
-        return bool(c.execute("SELECT 1 FROM clip_jobs WHERE workspace_id=? AND status IN ('uploading','queued','rendering') LIMIT 1", (workspace,)).fetchone())
+        return bool(c.execute("SELECT 1 FROM clip_jobs WHERE workspace_id=? AND status IN ('uploading','import_queued','importing','queued','rendering') LIMIT 1", (workspace,)).fetchone())
 
 
 def delete_workspace(workspace):
@@ -395,7 +435,7 @@ def delete_workspace(workspace):
     with connect() as c:
         c.execute('BEGIN IMMEDIATE')
         rows = c.execute('SELECT id,status FROM clip_jobs WHERE workspace_id=?', (workspace,)).fetchall()
-        if any(r['status'] in ('uploading','queued','rendering') for r in rows):
+        if any(r['status'] in ('uploading','import_queued','importing','queued','rendering') for r in rows):
             raise ValueError('Wait for pending video clips to finish or delete queued clips before deleting your account.')
         c.execute('DELETE FROM clip_jobs WHERE workspace_id=?', (workspace,))
         c.execute('DELETE FROM clip_daily_usage WHERE workspace_id=?', (workspace,))
@@ -405,6 +445,9 @@ def delete_workspace(workspace):
 
 def process_next_job():
     """Called by the app maintenance worker; claim at most one global render."""
+    from app_mvp import preview_mode
+    if preview_mode():
+        return False
     if not renderer_readiness()['ready']:
         return False
     init()
@@ -412,14 +455,15 @@ def process_next_job():
     with connect() as c:
         c.execute('BEGIN IMMEDIATE')
         # A restart must not leave interrupted jobs blocking the queue forever.
-        c.execute("UPDATE clip_jobs SET status='failed',error='Rendering was interrupted. Please create a new clip.',updated=? WHERE status IN ('rendering','uploading') AND updated<?", (now, now-3600))
-        if c.execute("SELECT 1 FROM clip_jobs WHERE status='rendering' LIMIT 1").fetchone():
+        c.execute("UPDATE clip_jobs SET status='failed',error='Rendering was interrupted. Please create a new clip.',source_url='',updated=? WHERE status IN ('rendering','uploading','importing') AND updated<?", (now, now-3600))
+        if c.execute("SELECT 1 FROM clip_jobs WHERE status IN ('rendering','importing') LIMIT 1").fetchone():
             return False
-        row = c.execute("SELECT * FROM clip_jobs WHERE status='queued' ORDER BY created,id LIMIT 1").fetchone()
+        row = c.execute("SELECT * FROM clip_jobs WHERE status IN ('queued','import_queued') ORDER BY created,id LIMIT 1").fetchone()
         if not row:
             return False
         row = dict(row)
-        c.execute("UPDATE clip_jobs SET status='rendering',updated=? WHERE id=? AND status='queued'", (now, row['id']))
+        next_state='importing' if row['status']=='import_queued' else 'rendering'
+        c.execute('UPDATE clip_jobs SET status=?,updated=? WHERE id=? AND status=?', (next_state,now,row['id'],row['status']))
     folder = job_dir(row['id'])
     try:
         if row['workspace_id'] != 'owner':
@@ -427,13 +471,38 @@ def process_next_job():
                 account = c.execute('SELECT email_verified FROM customer_accounts WHERE workspace_id=?', (row['workspace_id'],)).fetchone()
             if not account or not account['email_verified']:
                 raise ValueError('Confirm your email before rendering this clip.')
+        if row['status']=='import_queued':
+            import video_sources
+            options=json.loads(row['options_json'])
+            try:
+                incoming=folder/'source.download'
+                imported=video_sources.import_video_dispatch(row['source_url'],incoming,max_bytes=upload_limit(),timeout=180)
+                extension=imported['extension']
+                if extension not in ('.mp4','.webm'):
+                    raise ValueError('This link does not contain a supported video.')
+                incoming.rename(folder/('source'+extension))
+                duration=float(imported['duration'])
+                if not math.isfinite(duration) or not 15<=duration<=5400:
+                    raise ValueError('Choose a video between 15 seconds and 90 minutes.')
+                if options.get('start') is None:
+                    options['duration']=min(options['duration'],duration)
+                if options['duration']>duration or options.get('end',0)>duration:
+                    raise ValueError('The chosen clip must fit inside the linked video.')
+                with connect() as c:
+                    c.execute("UPDATE clip_jobs SET status='queued',source_ext=?,source_duration=?,source_url='',options_json=?,updated=? WHERE id=? AND status='importing'",(extension,duration,json.dumps(options),int(time.time()),row['id']))
+            except (ValueError,OSError,KeyError,TypeError):
+                _validation_failed(row['id'],'We could not import that video. Check the link or upload the video file instead. No render attempt was used.',importing=True)
+                shutil.rmtree(folder,ignore_errors=True)
+            return True
         from features.clip_studio import render_clip
         options = json.loads(row['options_json'])
         brand_name = options.pop('brand_name', 'Your video')
         accent = options.pop('accent', '#A7F36A')
-        kit = folder / 'brand.json'
-        kit.write_text(json.dumps({'name': brand_name, 'end_card_name': brand_name,
-                                   'accent': accent, 'text_only': True}), encoding='utf-8')
+        kit = folder/'brand'/'kit.json'
+        if not kit.is_file():
+            # Migration for queued clips created before persistent branding.
+            import clip_branding
+            kit=clip_branding.snapshot_brand(row['workspace_id'],folder,name=brand_name,accent=accent)
         options['brand'] = str(kit)
         if row['caption_revision']:
             options['captions_file'] = str(folder / 'edited.srt')
@@ -452,3 +521,33 @@ def process_next_job():
         # Engine stderr/build logs can contain private paths/transcript; keep them private.
         _fail(row['id'], 'We could not finish a usable clip. Your video was not published. Try a clearer speaking section or a new upload.')
     return True
+
+
+@clip_bp.route('/clips/publishing')
+def publishing_jobs():
+    import clip_publishing
+    return jsonify(jobs=clip_publishing.jobs(actor()))
+
+
+@clip_bp.route('/clips/jobs/<identifier>/publish',methods=['POST'])
+def schedule_publish(identifier):
+    import clip_publishing
+    workspace=actor();_csrf()
+    _owned(identifier,workspace)
+    try:
+        job=clip_publishing.schedule(workspace,identifier,request.form.get('page_id',''),
+            request.form.get('due_at',''),request.form.get('caption',''),
+            permission_confirmed=request.form.get('confirmed')=='yes')
+        return jsonify(job=job),202
+    except (ValueError,PermissionError) as exc:
+        return jsonify(error=str(exc)),400
+
+
+@clip_bp.route('/clips/publishing/<int:identifier>/cancel',methods=['POST'])
+def cancel_publish(identifier):
+    import clip_publishing
+    workspace=actor();_csrf()
+    try:
+        return jsonify(job=clip_publishing.cancel(workspace,identifier))
+    except (ValueError,PermissionError) as exc:
+        return jsonify(error=str(exc)),400

@@ -189,6 +189,8 @@ _EXPORT_TABLES={
  'website_requests':('id','url','topic','cadence','status','created_at'),
  'subscriptions':('status','plan','current_period_end'),
  'clip_jobs':('id','status','created','updated','source_duration','options_json','summary_json','error','caption_revision'),
+ 'clip_brand_profiles':('name','accent','revision'),
+ 'clip_publish_jobs':('id','clip_id','page_id','due_at','caption','status','remote_id','permalink_url','error','created','updated'),
 }
 
 
@@ -254,9 +256,11 @@ def delete_customer(user,password,confirmation):
         existing={r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if 'clip_jobs' in existing:
             clips=c.execute('SELECT id,status FROM clip_jobs WHERE workspace_id=?',(ws,)).fetchall()
-            if any(r['status'] in ('uploading','queued','rendering') for r in clips):
+            if any(r['status'] in ('uploading','import_queued','importing','queued','rendering') for r in clips):
                 raise ValueError('Wait for video renders to finish, or delete queued clips in Clip Studio, before deleting your account.')
             clip_identifiers=[r['id'] for r in clips]
+        if 'clip_publish_jobs' in existing and c.execute("SELECT 1 FROM clip_publish_jobs WHERE workspace_id=? AND status IN ('scheduled','sending','processing') LIMIT 1",(ws,)).fetchone():
+            raise ValueError('Cancel pending video posts and wait for uploads to finish before deleting your account.')
         if 'subscriptions' in existing:
             sub=c.execute('SELECT status FROM subscriptions WHERE workspace_id=?',(ws,)).fetchone()
             if sub and sub['status'] not in ('canceled','cancelled','incomplete_expired'):
@@ -296,6 +300,8 @@ def delete_customer(user,password,confirmation):
         from clip_studio_web import job_dir
         for identifier in clip_identifiers:
             shutil.rmtree(job_dir(identifier),ignore_errors=True)
+    import clip_branding
+    clip_branding.delete_workspace(ws)
     return True
 
 

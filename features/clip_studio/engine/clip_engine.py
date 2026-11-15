@@ -181,15 +181,22 @@ def probe(path):
             'dur': float(info['format']['duration'])}
 
 # ---------------------------------------------------------------- transcribe
-def transcribe(src, workdir, model_name='base.en'):
+def transcribe(src, workdir, model_name=None):
+    # An operator prepares the model once. Customer jobs must not download it,
+    # contact model providers or incur an unbounded first-use setup delay.
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(ENGINE_DIR)))
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+    from features.clip_studio.speech_model import load_local_model
+    if model_name:
+        os.environ['AUTOPOST_CLIP_MODEL'] = model_name
+    try:
+        model = load_local_model(require_health=True)
+    except (ImportError, OSError, RuntimeError, ValueError):
+        raise SystemExit('Speech recognition is not ready. Ask the service operator to prepare and verify the local speech model.') from None
     wav = os.path.join(workdir, 'audio16k.wav')
     run(['ffmpeg', '-v', 'error', '-i', src, '-vn', '-ac', '1', '-ar', '16000',
          wav, '-y'])
-    try:
-        from faster_whisper import WhisperModel
-    except ImportError:
-        raise SystemExit('faster_whisper not importable — expected it in '
-                         '~/workspace/tools/fw (or set CLIP_FW_PATH)')
     # decode via stdlib wave -> float32 array (avoids PyAV version drift in
     # faster_whisper.decode_audio on this machine)
     import wave as wave_mod
@@ -197,7 +204,6 @@ def transcribe(src, workdir, model_name='base.en'):
     with wave_mod.open(wav, 'rb') as wf:
         pcm = wf.readframes(wf.getnframes())
     audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
-    model = WhisperModel(model_name, device='cpu', compute_type='int8')
     segments, _info = model.transcribe(audio, word_timestamps=True,
                                        beam_size=1, language='en')
     words = []
@@ -2462,7 +2468,8 @@ def main():
     ap.add_argument('--transcript-file', default=None,
                     help='Reuse a saved source-timeline .transcript.json instead of transcribing again')
     ap.add_argument('--out', default=None)
-    ap.add_argument('--model', default='base.en')
+    ap.add_argument('--model', default=None,
+                    help='Operator-provisioned model name (defaults to AUTOPOST_CLIP_MODEL or base.en); never downloads during a render')
     ap.add_argument('--keep-work', action='store_true')
     args = ap.parse_args()
 

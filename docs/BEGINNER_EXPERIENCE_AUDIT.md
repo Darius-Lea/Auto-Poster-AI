@@ -1,5 +1,7 @@
 # Beginner experience audit — November 14, 2026
 
+> Historical baseline: see [current integrated release status](MARKET_RELEASE_2026-11-14.md) for the later shared-account, logo, link-import and video-publishing changes.
+
 **Verdict:** the source now offers a clearer first step and a usable clip-review interface, but the complete “I saw an ad, created my first clip, and launched a professional social business Page” journey is not finished. A new user still needs an existing video, an app account with confirmed email, an available renderer, and separate social-platform setup. A clip download is not a published video or a completed business.
 
 This is a source-based walkthrough from the perspective of a 70-year-old with little social-media experience. It is not a usability study with an older participant. Reviewed `website/index.html`, the account/confirmation flow, `templates/clip_studio.html`, `static/clip-studio.js`, the hosted clip adapter, help and first-week planning source. Other helpers handle browser/regression checks; this audit does not claim a live Render login, email delivery, completed customer render, trend feed, sales, earnings or virality was verified.

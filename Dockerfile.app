@@ -4,6 +4,8 @@ ENV PYTHONUNBUFFERED=1 \
     AUTOPOST_WEB_HOST=0.0.0.0 \
     AUTOPOST_WEB_DB=/var/lib/autoposter/app.db \
     AUTOPOST_CLIP_DATA_DIR=/var/lib/autoposter/clip-data \
+    AUTOPOST_CLIP_MODEL_CACHE=/var/lib/autoposter/models/clip-studio \
+    AUTOPOST_CLIP_WARM_ON_START=false \
     HF_HOME=/var/lib/autoposter/models
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
@@ -20,13 +22,15 @@ COPY templates/ ./templates/
 COPY static/ ./static/
 COPY website/ ./website/
 COPY scripts/qa/check_integrations.py ./scripts/qa/check_integrations.py
+COPY scripts/qa/clip_transcription_smoke.py scripts/qa/render_release_check.py ./scripts/qa/
 COPY features/__init__.py ./features/__init__.py
-COPY features/clip_studio/__init__.py features/clip_studio/clip_studio.py ./features/clip_studio/
+COPY features/clip_studio/__init__.py features/clip_studio/clip_studio.py features/clip_studio/speech_model.py ./features/clip_studio/
 COPY features/clip_studio/engine/clip_engine.py ./features/clip_studio/engine/
 COPY features/clip_studio/engine/assets/ ./features/clip_studio/engine/assets/
 COPY features/clip_studio/engine/brands/ ./features/clip_studio/engine/brands/
 COPY features/clip_studio/app/assets/example-clip.mp4 ./features/clip_studio/app/assets/example-clip.mp4
+COPY features/clip_studio/app/sample/sample-podcast.mp4 ./features/clip_studio/app/sample/sample-podcast.mp4
 RUN mkdir -p /var/lib/autoposter
 # One worker owns SQLite and the background schedulers. Render threads never
 # occupy HTTP handlers. The operator must attach the persistent data directory.
-CMD ["sh", "-c", "exec gunicorn app_mvp_wsgi:app --bind 0.0.0.0:${PORT:-8080} --workers 1 --threads 4 --timeout 120"]
+CMD ["sh", "-c", "if [ \"${AUTOPOST_CLIP_WARM_ON_START:-false}\" = true ]; then python scripts/qa/clip_transcription_smoke.py --warm --timeout 900 || exit $?; fi; exec gunicorn app_mvp_wsgi:app --bind 0.0.0.0:${PORT:-8080} --workers 1 --threads 4 --timeout 120"]

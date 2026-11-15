@@ -5,15 +5,14 @@ SQLite database and Clip Studio media require persistent storage. This entry
 point starts the publishing and clip schedulers; never use multiple workers.
 """
 import os
-import secrets
 import threading
 
 from app_mvp import app, init_db, recover_interrupted, worker
 
 password = os.getenv("AUTOPOST_APP_PASSWORD", "")
 web_secret = os.getenv("AUTOPOST_WEB_SECRET", "")
-if len(password) < 12:
-    raise RuntimeError("Set AUTOPOST_APP_PASSWORD with at least 12 characters")
+if password and len(password) < 12:
+    raise RuntimeError("An optional AUTOPOST_APP_PASSWORD must contain at least 12 characters")
 if len(web_secret) < 32:
     raise RuntimeError("Set AUTOPOST_WEB_SECRET with at least 32 unpredictable characters")
 

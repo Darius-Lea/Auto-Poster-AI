@@ -6,7 +6,8 @@ The customer website uses authenticated workspaces, its own scheduler,
 and `/clips` for private Clip Studio uploads, previews and caption revisions.
 It stays separate from the original owner publisher described below.
 See [hosted app setup](docs/HOSTED_APP_DEPLOYMENT.md),
-[actual integration status](docs/INTEGRATION_STATUS.md),
+[current release status](docs/MARKET_RELEASE_2026-11-14.md),
+[connection details](docs/INTEGRATION_STATUS.md),
 [beginner experience audit](docs/BEGINNER_EXPERIENCE_AUDIT.md), and
 [store submission requirements](docs/STORE_SUBMISSION.md).
 Native client sources are included; no signed store release is claimed.
@@ -23,7 +24,7 @@ post in batches, departures get their own announcement, and the daily
 Fugitive of the Day and Cold Case of the Day posts run on their own schedules.
 These are starting times to test, not a claim about Facebook's optimal posting times.
 The current configuration uses
-the Allen County roster for Fort Wayne. Workspaces share runtime credentials; this is not yet a tenant-isolated subscription app.
+the Allen County roster for Fort Wayne. The legacy city pipeline uses operator credentials. The customer web app has separate accounts, private workspace storage and scoped connection credentials.
 
 The roster scan includes all booking dates and selects the oldest unposted
 current listings first. It does not repost a confirmed delivery to the same

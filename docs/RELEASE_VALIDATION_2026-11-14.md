@@ -1,5 +1,7 @@
 # Release verification — November 14, 2026
 
+> Historical baseline: see [current integrated release status](MARKET_RELEASE_2026-11-14.md) for the later shared-account, logo, link-import and video-publishing changes.
+
 ## Verdict and scope
 
 The existing web customer journey passes its automated regressions. This is evidence for the code under test, **not** a claim that Render has deployed this revision, that customer OAuth is approved, that a live integration has succeeded, or that any app store has accepted an application. Public paid launch still requires the live checks below.

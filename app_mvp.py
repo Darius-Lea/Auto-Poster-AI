@@ -115,6 +115,10 @@ def init_db():
     launch.init()
     import clip_studio_web
     clip_studio_web.init()
+    import clip_branding, clip_publishing, editing_trends
+    clip_branding.init()
+    clip_publishing.init()
+    editing_trends.init()
 
 
 def current_workspace():
@@ -279,6 +283,8 @@ def recover_interrupted():
         )
     import clip_studio_web
     clip_studio_web.recover_interrupted()
+    import clip_publishing
+    clip_publishing.recover_interrupted()
 
 
 def _maintenance_pass(name, callback, interval):
@@ -305,10 +311,11 @@ def worker():
             run_due()
         except Exception:
             app.logger.exception("Scheduler pass failed")
-        import creative_jobs, analytics_workbench, clip_studio_web
+        import creative_jobs, analytics_workbench, clip_studio_web, clip_publishing
         _maintenance_pass('creative',creative_jobs.tick,20)
         _maintenance_pass('analytics',analytics_workbench.tick,60)
         _maintenance_pass('clips',clip_studio_web.process_next_job,20)
+        _maintenance_pass('clip-publishing',clip_publishing.process_next_publish,20)
         time.sleep(20)
 
 
@@ -488,10 +495,12 @@ LOGIN = """<!doctype html><html><meta name="viewport" content="width=device-widt
 input,button{box-sizing:border-box;width:100%;padding:15px;margin:10px 0;border-radius:10px;font:inherit}
 input{background:#222834;color:white;border:1px solid #444}
 button{background:#beee83;border:0;color:#122007;font-weight:700}
-p{color:#b1b9c9}</style><h1 class="brand-login-logo"><img class="brand-icon" src="/static/brand/mark.svg" width="48" height="48" alt="">Auto Poster AI</h1><p>Sign in to your private starter dashboard.</p>
+p{color:#b1b9c9}a{color:#c8f68a}.member-link{display:block;box-sizing:border-box;padding:15px;margin:12px 0;background:#beee83;color:#122007;border-radius:10px;text-align:center;text-decoration:none;font-weight:700}summary{cursor:pointer;margin-top:26px}</style><h1 class="brand-login-logo"><img class="brand-icon" src="/static/brand/mark.svg" width="48" height="48" alt="">Auto Poster AI</h1><p>One account for your posts, Clip Studio and saved business look.</p>
+<a class="member-link" href="/account?mode=login">Sign in with my email</a><a class="member-link" href="/account?mode=register">Create my account</a><p><a href="/account/forgot">Forgot your password?</a></p>
+{% if owner_enabled %}<details><summary>Owner controls</summary><p>This separate password is only for the service operator.</p>
 <form method="post" action="/login"><input name="password" type="password"
 autocomplete="current-password" placeholder="App password" required>
-<button>Sign in</button></form></html>"""
+<button>Open owner controls</button></form></details>{% endif %}</html>"""
 
 
 WEBSITE_PAGE = """
@@ -573,8 +582,13 @@ def website_requests():
 
 @app.route("/welcome")
 def public_website():
-    """Public marketing site; the paid owner dashboard stays separate."""
-    return send_from_directory("website", "index.html")
+    """Start with an available workflow instead of a disabled creation tool."""
+    from clip_studio_web import renderer_readiness
+    available=not preview_mode() and renderer_readiness()['ready']
+    response=Response(render_template_string((Path(__file__).parent/'website/index.html').read_text(),
+                                             clip_available=available),mimetype='text/html')
+    response.headers['Cache-Control']='no-store'
+    return response
 
 
 @app.route("/start", methods=["GET"])
@@ -585,9 +599,9 @@ def public_onboarding():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    if not PASSWORD:
-        abort(503, "Configure AUTOPOST_APP_PASSWORD on the server first.")
     if request.method == "POST":
+        if not PASSWORD:
+            abort(503, "Owner access is unavailable. Use your customer account to sign in.")
         try:
             customer_accounts.attempt("owner-login",request.remote_addr or "local",limit=30)
         except PermissionError as exc:
@@ -599,7 +613,7 @@ def login():
             session["csrf"] = secrets.token_urlsafe(32)
             return redirect("/")
         abort(401, "Wrong password")
-    return LOGIN
+    return render_template_string(LOGIN,owner_enabled=bool(PASSWORD))
 
 
 ACCOUNT_DESTINATIONS={"setup":"/?finish_setup=1","launch":"/launch","pages":"/pages","studio":"/studio","clips":"/clips","connections":"/connections","reports":"/reports","settings":"/account/settings"}
@@ -649,7 +663,7 @@ def logout():
 
 @app.before_request
 def protect():
-    if request.endpoint in ("login", "account", "static", "stripe_webhook", "manifest", "app_icon", "legacy_claim", "public_website", "public_onboarding", "launch.begin", "launch.build", "launch.export_plan", "account_support.forgot_password", "account_support.reset_password", "account_support.verify_email", "help.guide", "help.privacy", "help.terms", "pwa.install_page", "pwa.service_worker", "pwa.offline_page", "clips.example"):
+    if request.endpoint in ("login", "account", "static", "stripe_webhook", "manifest", "app_icon", "legacy_claim", "public_website", "public_onboarding", "launch.begin", "launch.build", "launch.export_plan", "account_support.forgot_password", "account_support.reset_password", "account_support.verify_email", "help.guide", "help.privacy", "help.terms", "pwa.install_page", "pwa.service_worker", "pwa.offline_page", "clips.example", "version_info"):
         return
     if (request.endpoint == "home" and request.method == "GET"
             and os.getenv("AUTOPOST_PUBLIC_LANDING", "false").lower() == "true"
@@ -668,6 +682,9 @@ def protect():
             # Ordinary account, billing and caption requests retain their 64 KiB limit.
             from clip_studio_web import upload_limit
             request.max_content_length = upload_limit() + 1024 * 1024
+        elif request.path == '/clips/brand':
+            from clip_branding import MAX_LOGO_BYTES
+            request.max_content_length = MAX_LOGO_BYTES + 64 * 1024
         # Browser form requests must include a session CSRF token.
         if not _same_secret(
             request.headers.get("X-CSRF-Token") or request.form.get("_csrf", ""), session.get("csrf", "missing")
@@ -1141,6 +1158,14 @@ def manifest():
                     ]})
 
 
+@app.route('/version')
+def version_info():
+    revision=(os.getenv('RENDER_GIT_COMMIT') or os.getenv('AUTOPOST_RELEASE_COMMIT') or '').strip()
+    if len(revision)!=40 or any(char not in '0123456789abcdefABCDEF' for char in revision):
+        revision=None
+    return jsonify(product='auto-poster-ai',commit=revision.lower() if revision else None)
+
+
 @app.route("/icon.svg")
 def app_icon():
     return send_from_directory("static/brand", "app-icon.svg", mimetype="image/svg+xml")
@@ -1295,10 +1320,14 @@ from pwa import pwa_bp
 app.register_blueprint(pwa_bp)
 from clip_studio_web import clip_bp
 app.register_blueprint(clip_bp)
+from clip_branding import branding_bp
+app.register_blueprint(branding_bp)
+from editing_trends import trends_bp
+app.register_blueprint(trends_bp)
 
 
 def start():
-    if not PASSWORD or len(PASSWORD) < 12:
+    if PASSWORD and len(PASSWORD) < 12:
         raise RuntimeError("Set AUTOPOST_APP_PASSWORD to a strong password of at least 12 characters")
     if not os.getenv("AUTOPOST_WEB_SECRET") or len(os.getenv("AUTOPOST_WEB_SECRET", "")) < 32:
         raise RuntimeError("Set AUTOPOST_WEB_SECRET to at least 32 unpredictable characters")
