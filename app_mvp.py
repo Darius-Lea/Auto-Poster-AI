@@ -20,7 +20,7 @@ from werkzeug.exceptions import Unauthorized
 from pathlib import Path
 
 from dotenv import load_dotenv
-from flask import Flask, abort, flash, redirect, render_template, render_template_string, request, session, url_for, jsonify, Response, send_from_directory
+from flask import Flask, abort, flash, redirect, render_template, render_template_string, request, session, url_for, jsonify, Response, send_from_directory, g
 
 import app_control
 import meta_accounts
@@ -40,6 +40,8 @@ MAX_POSTS_PER_RUN = 10
 _MAINTENANCE_LOCK = threading.Lock()
 _MAINTENANCE_THREADS = {}
 _MAINTENANCE_LAST = {}
+_BOOTSTRAP_LOCK = threading.RLock()
+_INITIALIZED_DATABASES = set()
 
 
 def _same_secret(a, b):
@@ -51,7 +53,7 @@ def preview_mode() -> bool:
 
 
 def db():
-    connection = sqlite3.connect(DATABASE, timeout=10)
+    connection = sqlite3.connect(DATABASE, timeout=2)
     connection.row_factory = sqlite3.Row
     return connection
 
@@ -119,6 +121,32 @@ def init_db():
     clip_branding.init()
     clip_publishing.init()
     editing_trends.init()
+    _INITIALIZED_DATABASES.add(_database_key())
+
+
+def _database_key():
+    return (os.getpid(), str(Path(DATABASE).resolve()))
+
+
+def ensure_database_ready():
+    """Support direct WSGI imports as well as the scheduler entry point.
+
+    Public account forms stay lightweight. The first operation using account or
+    workspace storage creates/migrates the complete schema before a user can be
+    created or redirected into an incomplete workspace.
+    """
+    key=_database_key()
+    if key in _INITIALIZED_DATABASES:
+        return
+    with _BOOTSTRAP_LOCK:
+        if key in _INITIALIZED_DATABASES:
+            return
+        # Fail promptly if an existing database is currently write-locked,
+        # rather than waiting through each module's migration timeout.
+        with db() as connection:
+            connection.execute('BEGIN IMMEDIATE')
+            connection.rollback()
+        init_db()
 
 
 def current_workspace():
@@ -146,10 +174,33 @@ def is_owner():
 
 @app.context_processor
 def account_context():
-    user=customer_accounts.get(session.get("account_id")) if session.get("authorized") else None
+    unavailable=getattr(g,'storage_unavailable',False)
+    user=customer_accounts.get(session.get("account_id")) if session.get("authorized") and not unavailable else None
     if user and int(session.get("auth_version",0)) != int(user.get("auth_version",0)):
         user=None
-    return {"customer_account":user,"owner_workspace":session.get("authorized") is True and not session.get("account_id"),"workspace_id":user["workspace_id"] if user else "owner"}
+    return {"customer_account":user,"owner_workspace":not unavailable and session.get("authorized") is True and not session.get("account_id"),"workspace_id":user["workspace_id"] if user else "owner"}
+
+
+@app.after_request
+def shared_tools_navigation(response):
+    """One mobile-friendly tools menu across the existing HTML screens."""
+    if (request.endpoint=='pwa.offline_page' or request.method!='GET' or response.status_code!=200
+            or response.mimetype!='text/html' or response.direct_passthrough):
+        return response
+    html=response.get_data(as_text=True)
+    if 'id="ap-tool-sidebar-script"' in html:
+        return response
+    signed_in='true' if session.get('authorized') is True else 'false'
+    assets=('<link rel="stylesheet" href="/static/tool-sidebar.css">'
+            '<script id="ap-tool-sidebar-script" src="/static/tool-sidebar.js" defer '
+            'data-signed-in="'+signed_in+'"></script>')
+    marker=html.lower().rfind('</body>')
+    if marker<0:
+        marker=html.lower().rfind('</html>')
+    html=html[:marker]+assets+html[marker:] if marker>=0 else html+assets
+    response.set_data(html)
+    response.headers['Cache-Control']='no-store'
+    return response
 
 
 def valid_due(value):
@@ -663,6 +714,8 @@ def logout():
 
 @app.before_request
 def protect():
+    if request.endpoint and (session.get('authorized') is True or request.method not in ('GET','HEAD','OPTIONS')):
+        ensure_database_ready()
     if request.endpoint in ("login", "account", "static", "stripe_webhook", "manifest", "app_icon", "legacy_claim", "public_website", "public_onboarding", "launch.begin", "launch.build", "launch.export_plan", "account_support.forgot_password", "account_support.reset_password", "account_support.verify_email", "help.guide", "help.privacy", "help.terms", "pwa.install_page", "pwa.service_worker", "pwa.offline_page", "clips.example", "version_info"):
         return
     if (request.endpoint == "home" and request.method == "GET"
@@ -697,6 +750,36 @@ def protect():
         if not customer or not customer.get('email_verified'):
             flash('Verify your email in Account settings before connecting accounts or activating paid publishing.')
             return redirect('/account/settings')
+
+
+@app.errorhandler(customer_accounts.AuthStorageUnavailable)
+@app.errorhandler(sqlite3.OperationalError)
+def storage_unavailable(exc):
+    """Recover from storage contention without leaking database details."""
+    g.storage_unavailable=True
+    app.logger.error('Account or workspace storage unavailable',exc_info=(type(exc),exc,exc.__traceback__))
+    message='The service is busy right now. Please wait a moment and try again. If you already created an account, sign in with the same email.'
+    if request.endpoint=='account':
+        mode=request.form.get('mode',request.args.get('mode','login'))
+        if mode not in ('register','login'):
+            mode='login'
+        next_value=request.values.get('next','')
+        if next_value not in ACCOUNT_DESTINATIONS:
+            next_value=''
+        if not session.get('csrf'):
+            session['csrf']=secrets.token_urlsafe(32)
+        response=Response(render_template('account.html',mode=mode,error=message,
+            email=request.form.get('email','')[:254],name=request.form.get('name','')[:80],
+            next_value=next_value,csrf=session['csrf']),status=503,mimetype='text/html')
+    elif (request.path.startswith(('/api/','/clips/jobs','/clips/brand','/clips/publishing','/studio/draft'))
+          or request.accept_mimetypes.best=='application/json'):
+        response=jsonify(error=message)
+        response.status_code=503
+    else:
+        response=Response(render_template('service_unavailable.html',message=message),status=503,mimetype='text/html')
+    response.headers['Retry-After']='2'
+    response.headers['Cache-Control']='no-store'
+    return response
 
 
 @app.route("/start/import", methods=["POST"])

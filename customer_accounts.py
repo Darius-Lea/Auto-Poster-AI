@@ -6,11 +6,51 @@ import re
 import secrets
 import sqlite3
 import time
+from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 
 
+class AuthStorageUnavailable(RuntimeError):
+    """A safe retryable account-service failure; details stay in server logs."""
+
+
+_UNAVAILABLE = 'Account access is temporarily unavailable. Please try again in a moment.'
+
+
+def _storage_errors(function):
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        try:
+            return function(*args, **kwargs)
+        except sqlite3.OperationalError as exc:
+            raise AuthStorageUnavailable(_UNAVAILABLE) from exc
+    return wrapped
+
+
+def _hash_secret(password):
+    try:
+        return generate_password_hash(password, method='scrypt')
+    except (ValueError, MemoryError) as exc:
+        # Keep the existing memory-hard hash rather than silently downgrading it.
+        raise AuthStorageUnavailable(_UNAVAILABLE) from exc
+
+
+def _check_secret(stored, password):
+    try:
+        return check_password_hash(stored, password)
+    except (ValueError, MemoryError) as exc:
+        raise AuthStorageUnavailable(_UNAVAILABLE) from exc
+
+
+def _public_user(row):
+    user={key:row[key] for key in ('id','workspace_id','email','name','created_at','auth_version','email_verified')}
+    user['email_verified']=bool(user['email_verified'])
+    return user
+
+
 def connect():
-    c = sqlite3.connect(os.getenv('AUTOPOST_WEB_DB', 'autopost_web.db'), timeout=15)
+    # Do not leave an account form spinning for the old 15-second write wait.
+    c = sqlite3.connect(os.getenv('AUTOPOST_WEB_DB', 'autopost_web.db'), timeout=2)
     c.row_factory = sqlite3.Row
     return c
 
@@ -32,6 +72,7 @@ def init():
             c.execute('ALTER TABLE customer_accounts ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0')
 
 
+@_storage_errors
 def attempt(action, identity, limit=12, window=300, now=None):
     now = int(time.time()) if now is None else now
     key = hashlib.sha256((action+':'+identity).encode()).hexdigest()
@@ -44,6 +85,7 @@ def attempt(action, identity, limit=12, window=300, now=None):
         c.execute('INSERT INTO customer_auth_limits VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=count+1', (key,now+window))
 
 
+@_storage_errors
 def register(email, password, name=''):
     if os.getenv('AUTOPOST_CUSTOMER_SIGNUP_ENABLED','true').lower() != 'true':
         raise PermissionError('New accounts are temporarily unavailable.')
@@ -53,17 +95,31 @@ def register(email, password, name=''):
         raise ValueError('Use a password of 12–256 characters.')
     if not isinstance(name,str) or not name.strip() or len(name.strip())>80:
         raise ValueError('Enter your name (up to 80 characters).')
+    password_hash=_hash_secret(password)
+    # Support programmatic callers that initialized accounts alone. Full app
+    # startup already creates these tables. Do migrations before account writes:
+    # app_control.init uses executescript, which would commit an active insert.
+    with connect() as c:
+        controls_ready=c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='publishing_controls'").fetchone()
+    if not controls_ready:
+        import app_control
+        app_control.init()
     user_id=secrets.token_hex(16); workspace_id='ws_'+secrets.token_hex(16)
+    created=int(time.time())
     with connect() as c:
         try:
-            c.execute('INSERT INTO customer_accounts(id,workspace_id,email,name,password_hash,created_at) VALUES(?,?,?,?,?,?)', (user_id,workspace_id,email.strip().lower(),name.strip(),generate_password_hash(password,method='scrypt'),int(time.time())))
+            c.execute('BEGIN IMMEDIATE')
+            c.execute('INSERT INTO customer_accounts(id,workspace_id,email,name,password_hash,created_at) VALUES(?,?,?,?,?,?)', (user_id,workspace_id,email.strip().lower(),name.strip(),password_hash,created))
+            c.execute('INSERT INTO publishing_controls(workspace_id) VALUES(?)',(workspace_id,))
         except sqlite3.IntegrityError:
             raise ValueError('Unable to create that account. Try signing in instead.') from None
-    import app_control
-    app_control.init(workspace_id)
-    return get(user_id)
+    # Nothing after this commit can turn a successfully created account into a
+    # reported failure. In particular, do not run schema work or a second read.
+    return {'id':user_id,'workspace_id':workspace_id,'email':email.strip().lower(),
+            'name':name.strip(),'created_at':created,'auth_version':0,'email_verified':False}
 
 
+@_storage_errors
 def login(email,password):
     if not isinstance(email,str) or not isinstance(password,str) or len(email)>254 or len(password)>256:
         return None
@@ -71,17 +127,18 @@ def login(email,password):
         row=c.execute('SELECT * FROM customer_accounts WHERE email=?',(email.strip().lower(),)).fetchone()
     # Use the same expensive password calculation when the email is unknown.
     if not row:
-        generate_password_hash(password,method='scrypt')
+        _hash_secret(password)
         return None
-    return get(row['id']) if check_password_hash(row['password_hash'],password) else None
+    return _public_user(row) if _check_secret(row['password_hash'],password) else None
 
 
+@_storage_errors
 def get(user_id):
     if not isinstance(user_id,str):return None
     with connect() as c:
         row=c.execute('SELECT id,workspace_id,email,name,created_at,auth_version,email_verified FROM customer_accounts WHERE id=?',(user_id,)).fetchone()
     if not row:return None
-    user=dict(row);user['email_verified']=bool(user['email_verified']);return user
+    return _public_user(row)
 
 
 def workspace_exists(workspace_id):
@@ -94,13 +151,13 @@ def verify_password(user_id, password):
         return False
     with connect() as c:
         row=c.execute('SELECT password_hash FROM customer_accounts WHERE id=?',(user_id,)).fetchone()
-    return bool(row and check_password_hash(row['password_hash'],password))
+    return bool(row and _check_secret(row['password_hash'],password))
 
 
 def _password_hash(password):
     if not isinstance(password,str) or not 12<=len(password)<=256:
         raise ValueError('Use a password of 12–256 characters.')
-    return generate_password_hash(password,method='scrypt')
+    return _hash_secret(password)
 
 
 def create_reset_token(email, now=None):
@@ -141,7 +198,7 @@ def change_password(user_id,current_password,new_password):
         raise ValueError('Your current password did not match.')
     with connect() as c:
         row=c.execute('SELECT password_hash FROM customer_accounts WHERE id=?',(user_id,)).fetchone()
-    if not row or not check_password_hash(row['password_hash'],current_password):
+    if not row or not _check_secret(row['password_hash'],current_password):
         raise ValueError('Your current password did not match.')
     password_hash=_password_hash(new_password)
     with connect() as c:

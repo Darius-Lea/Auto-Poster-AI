@@ -14,6 +14,14 @@ brand assets. It never stores navigation responses, customer pages, API data,
 uploads, captions, authorization callbacks or POST requests. Install/precache
 fetches omit cookies and reject redirects. Unavailable network navigation shows
 the public reconnect screen; private workspace editing is not an offline feature.
+GET document navigation has a 12-second response deadline. If the host does not
+respond, the worker aborts that GET and shows the same public recovery screen;
+HTTP 5xx responses also use it. The screen explains that either the connection
+or service may be unavailable. **Try again** reloads the current document, so a
+failed sign-in navigation stays at its intended sign-in address instead of
+opening the marketing-plan page. The fallback contains no requested URL or
+customer data. POST submission and API requests are never intercepted or retried
+by this timeout. Existing installations receive public cache version v2.
 
 The cache is versioned and cleanup only removes this feature's prior public
 caches. Signing out clears the existing account session; no account pages were

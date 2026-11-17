@@ -98,8 +98,9 @@ def run():
                         # A genuine signed owner session visits private documents and API
                         # requests. Neither those responses nor logout enter Cache Storage.
                         page.goto(origin + "/login")
+                        page.get_by_text("Owner controls", exact=True).click()
                         page.get_by_placeholder("App password", exact=True).fill(env["AUTOPOST_APP_PASSWORD"])
-                        page.get_by_role("button", name="Sign in", exact=True).click()
+                        page.get_by_role("button", name="Open owner controls", exact=True).click()
                         page.wait_for_url(origin + "/")
                         for path in ["/studio", "/connections", "/control", "/clips"]:
                             response = page.goto(origin + path)
@@ -111,7 +112,7 @@ def run():
                         assert "clip" in page.title().lower(), page.title()
                         # Processing is explicitly off, so this is a disabled hosted
                         # interface check rather than a media-rendering success claim.
-                        assert "Clip rendering is not enabled" in page.locator("body").inner_text()
+                        assert "Video creation is being prepared" in page.locator("body").inner_text()
                         assert page.locator("#clip-submit").is_disabled()
                         assert page.locator('#clip-upload input[name="video"]').is_disabled()
                         page.screenshot(path=str(artifacts / f"autoposter-clips-{name}.png"), full_page=True)

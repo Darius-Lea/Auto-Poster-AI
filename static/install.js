@@ -7,8 +7,8 @@
   const installed = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   const network = () => {
     connection.textContent = navigator.onLine ?
-      'Your browser is online. Opening the app still requires access to its hosted service.' :
-      'You are offline. Connect to load your workspace and manage cloud publishing.';
+      'Your device reports a connection. The service still needs to respond before your workspace can open.' :
+      'Your device reports it is offline. Reconnect and try opening your workspace again.';
   };
   network();
   window.addEventListener('online', network);
