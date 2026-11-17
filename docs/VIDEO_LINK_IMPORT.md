@@ -47,3 +47,7 @@ Every redirect receives fresh URL and DNS validation. Every resolved address mus
 The importer refuses execution when an HTTP/HTTPS/ALL proxy is configured, matching the existing feed importer's boundary: this direct transport cannot prove DNS pinning through an arbitrary proxy and must not bypass the operator's network policy. A normal Render deployment with direct public egress can use it. Proxy-only deployments need an approved network transport that provides equivalent destination restrictions; file upload remains available meanwhile.
 
 This is a source import, not automatic social publishing, a promise of viral engagement, or evidence that a live Render deployment has been tested. Original and rendered media remain private to the customer's workspace and require durable private storage and the existing account/job deletion controls.
+
+## November 17 availability correction
+
+YouTube importing is enabled by default when the customer app has its bundled extractor and a compatible network. The application requirements now install the tested extractor, and the Docker/Render customer configuration explicitly enables it. An operator can still disable it. Known single-video watch, short, embed and recorded-live URLs normalize to one video; playlist tracking parameters do not request a playlist. Actual livestreams, private/protected videos, unsupported adaptive-only formats and other unsupported platforms remain unavailable. This is not a claim that every public link works or that a live Render download was verified.

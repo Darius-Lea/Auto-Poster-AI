@@ -1,4 +1,4 @@
-"""Confined, opt-in public YouTube metadata extraction and progressive import.
+"""Confined public YouTube metadata extraction and progressive import.
 
 No yt-dlp downloader or generic extractor is used. All extractor networking goes
 through the pinned transport below, in a bounded isolated child process.
@@ -27,7 +27,7 @@ _MESSAGE = 'This YouTube video could not be imported. Use an available public vi
 
 
 def enabled():
-    if os.getenv('AUTOPOST_YOUTUBE_IMPORT_ENABLED', 'false').lower() != 'true':
+    if os.getenv('AUTOPOST_YOUTUBE_IMPORT_ENABLED', 'true').lower() != 'true':
         return False
     try:
         import importlib.util
@@ -56,15 +56,15 @@ def validate_youtube_url(value):
                 or parsed.fragment or not is_youtube_url(value)):
             raise ValueError
         query=parse_qs(parsed.query)
-        if any(key in query for key in ('list','index')):
-            raise ValueError
+        # A watch link can contain playlist tracking; this extractor always
+        # imports only the explicit video ID and never the playlist.
         if parsed.hostname.endswith('youtu.be'):
             identifier=parsed.path.strip('/')
         elif parsed.path=='/watch':
             values=query.get('v',[])
             identifier=values[0] if len(values)==1 else ''
-        elif parsed.path.startswith('/shorts/'):
-            identifier=parsed.path[len('/shorts/'):].strip('/')
+        elif any(parsed.path.startswith(prefix) for prefix in ('/shorts/','/embed/','/live/')):
+            identifier=parsed.path.split('/')[2].strip('/')
         else:
             raise ValueError
         if not _ID.fullmatch(identifier):

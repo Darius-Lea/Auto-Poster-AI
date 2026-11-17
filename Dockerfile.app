@@ -6,6 +6,7 @@ ENV PYTHONUNBUFFERED=1 \
     AUTOPOST_CLIP_DATA_DIR=/var/lib/autoposter/clip-data \
     AUTOPOST_CLIP_MODEL_CACHE=/var/lib/autoposter/models/clip-studio \
     AUTOPOST_CLIP_WARM_ON_START=false \
+    AUTOPOST_YOUTUBE_IMPORT_ENABLED=true \
     HF_HOME=/var/lib/autoposter/models
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \

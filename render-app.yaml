@@ -36,6 +36,8 @@ services:
         value: "false"
       - key: AUTOPOST_CLIP_ENABLED
         value: "false"
+      - key: AUTOPOST_YOUTUBE_IMPORT_ENABLED
+        value: "true"
       - key: AUTOPOST_CLIP_MODEL
         value: base.en
       - key: AUTOPOST_CLIP_WARM_ON_START

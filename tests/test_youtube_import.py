@@ -25,13 +25,15 @@ def info(**changes):
 
 class YouTubeImportTests(unittest.TestCase):
     def test_only_single_supported_video_shapes_are_normalized(self):
-        for url in (WATCH,'https://youtu.be/'+VIDEO+'?t=12','https://youtube.com/shorts/'+VIDEO):
+        for url in (WATCH,'https://youtu.be/'+VIDEO+'?t=12','https://youtube.com/shorts/'+VIDEO,
+                    WATCH+'&list=other&index=2','https://youtube.com/embed/'+VIDEO,
+                    'https://youtube.com/live/'+VIDEO):
             self.assertEqual(youtube.validate_youtube_url(url),WATCH)
             with patch.object(youtube,'enabled',return_value=True):
                 self.assertEqual(sources.validate_import_url(url),WATCH)
-        for url in ('http://youtube.com/watch?v='+VIDEO,WATCH+'&list=other',WATCH+'#t=2',
+        for url in ('http://youtube.com/watch?v='+VIDEO,'https://youtube.com/playlist?list=other',WATCH+'#t=2',
                     'https://secret:token@youtube.com/watch?v='+VIDEO,
-                    'https://youtube.com/live/'+VIDEO,'https://youtu.be/no',
+                    'https://youtu.be/no',
                     'https://www.youtube.com.evil.org/watch?v='+VIDEO):
             with self.subTest(url=url),self.assertRaises(sources.VideoSourceError):
                 youtube.validate_youtube_url(url)
@@ -60,6 +62,20 @@ class YouTubeImportTests(unittest.TestCase):
             with self.assertRaises(sources.VideoSourceError):sources.validate_import_url(WATCH)
         with patch.dict(os.environ,{'AUTOPOST_YOUTUBE_IMPORT_ENABLED':'true'}),patch.object(sources,'_proxy_configured',return_value=True):
             self.assertFalse(youtube.enabled())
+
+    def test_installed_extractor_is_enabled_without_a_manual_feature_flag(self):
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('AUTOPOST_YOUTUBE_IMPORT_ENABLED', None)
+            with patch.object(importlib.util, 'find_spec', return_value=object()), patch.object(sources, '_proxy_configured', return_value=False):
+                self.assertTrue(youtube.enabled())
+
+    def test_default_enablement_still_requires_extractor_and_safe_network(self):
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('AUTOPOST_YOUTUBE_IMPORT_ENABLED', None)
+            with patch.object(importlib.util, 'find_spec', return_value=None), patch.object(sources, '_proxy_configured', return_value=False):
+                self.assertFalse(youtube.enabled())
+            with patch.object(importlib.util, 'find_spec', return_value=object()), patch.object(sources, '_proxy_configured', return_value=True):
+                self.assertFalse(youtube.enabled())
 
     def test_dispatch_preserves_direct_import_and_uses_confined_youtube(self):
         with patch.object(youtube,'import_youtube',return_value={'extension':'.mp4'}) as call:
