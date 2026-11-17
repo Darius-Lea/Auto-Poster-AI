@@ -1,8 +1,7 @@
 /* Only public, fixed assets belong in this cache. Account documents and APIs are network-only. */
 'use strict';
-const CACHE = 'autoposter-public-v2';
+const CACHE = 'autoposter-public-v3';
 const OFFLINE = '/offline';
-const NAVIGATION_TIMEOUT_MS = 12000;
 const PUBLIC_ASSETS = new Set([
   OFFLINE,
   '/static/brand/mark.svg',
@@ -38,32 +37,10 @@ async function connectionFallback() {
 }
 
 async function navigate(request) {
-  const controller = new AbortController();
-  const cancel = () => controller.abort();
-  if (request.signal?.aborted) cancel();
-  else request.signal?.addEventListener('abort', cancel, {once:true});
-  let timer;
-  try {
-    const deadline = new Promise((_, reject) => {
-      timer = setTimeout(() => {
-        controller.abort();
-        reject(new Error('The service did not respond in time.'));
-      }, NAVIGATION_TIMEOUT_MS);
-    });
-    const response = await Promise.race([fetch(request, {signal:controller.signal}), deadline]);
-    if (response.status >= 500) {
-      // The host replied, but cannot serve the page. Release an unread error
-      // body and show the same useful recovery screen instead of a raw gateway.
-      if (response.body) void response.body.cancel().catch(() => {});
-      return connectionFallback();
-    }
-    return response;
-  } catch (_) {
-    return connectionFallback();
-  } finally {
-    clearTimeout(timer);
-    request.signal?.removeEventListener('abort', cancel);
-  }
+  // Render can take longer to wake than an ordinary page request. Do not abort
+  // a healthy startup or replace genuine HTTP errors with an offline page.
+  try { return await fetch(request); }
+  catch (_) { return connectionFallback(); }
 }
 
 self.addEventListener('fetch', event => {
@@ -71,6 +48,8 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  // Recovery can explicitly use the browser's ordinary network navigation.
+  if (url.searchParams.get('_ap_retry') === '1') return;
   if (PUBLIC_ASSETS.has(url.pathname) && !url.search) {
     event.respondWith(caches.open(CACHE).then(async cache => {
       const stored = await cache.match(url.pathname);
@@ -81,7 +60,7 @@ self.addEventListener('fetch', event => {
     }));
     return;
   }
-  // Bound GET document loading. POSTs, APIs and customer data stay untouched.
+  // Only genuine network failures use recovery. HTTP errors remain visible.
   if (request.mode === 'navigate') {
     event.respondWith(navigate(request));
   }
