@@ -267,6 +267,35 @@ def example():
     return send_file(path, mimetype='video/mp4', conditional=True)
 
 
+@clip_bp.route('/clips/source/check',methods=['POST'])
+def check_source():
+    """Check link format/readiness without downloading or reserving a render."""
+    actor();_csrf()
+    import video_sources, youtube_import
+    candidate=request.form.get('video_url','').strip()
+    kind='youtube' if youtube_import.is_youtube_url(candidate) else 'direct'
+    try:
+        if kind=='youtube':
+            youtube_import.validate_youtube_url(candidate)
+        else:
+            video_sources.validate_video_url(candidate)
+    except ValueError as exc:
+        return jsonify(valid=False,kind='unsupported',import_available=False,
+                       render_available=False,message=str(exc)),400
+    capabilities=video_sources.capabilities()
+    imports=bool(capabilities.get('direct_video') and (kind!='youtube' or capabilities.get('youtube')))
+    unavailable=_can_render()
+    if not imports:
+        message=('This YouTube link has the right format, but YouTube importing is not available on this service yet. You can upload your original video instead.'
+                 if kind=='youtube' else 'This link has the right format, but link importing is unavailable on this service. You can upload the video file instead.')
+    elif unavailable:
+        message='The link format is supported. '+unavailable[0]
+    else:
+        message='The link format is supported. Choose Make my clip to import it; the video still needs to be publicly available in a supported format.'
+    return jsonify(valid=True,kind=kind,import_available=imports,
+                   render_available=unavailable is None,message=message)
+
+
 @clip_bp.route('/clips/jobs', methods=['GET', 'POST'])
 def jobs():
     workspace = actor()

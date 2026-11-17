@@ -119,6 +119,7 @@ jobs:
           python scripts/qa/clip_workflow_smoke.py
           python scripts/qa/account_access_smoke.py
           python scripts/qa/sidebar_smoke.py
+          python scripts/qa/clip_paste_smoke.py
       - name: Save browser screenshots
         if: always()
         uses: actions/upload-artifact@v4

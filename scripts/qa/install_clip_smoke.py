@@ -114,7 +114,8 @@ def run():
                         # interface check rather than a media-rendering success claim.
                         assert "Video creation is being prepared" in page.locator("body").inner_text()
                         assert page.locator("#clip-submit").is_disabled()
-                        assert page.locator('#clip-upload input[name="video"]').is_disabled()
+                        assert page.locator('#clip-video-url').is_enabled()
+                        assert page.locator('#clip-video-url').is_visible()
                         page.screenshot(path=str(artifacts / f"autoposter-clips-{name}.png"), full_page=True)
                         jobs = page.evaluate("""async () => {
                           const response = await fetch('/clips/jobs', {headers:{Accept:'application/json'}});

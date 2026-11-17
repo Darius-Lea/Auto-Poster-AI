@@ -195,6 +195,7 @@ def run():
                         page.wait_for_function("!document.getElementById('clip-brand-preview').hidden && document.getElementById('clip-brand-image').complete && document.getElementById('clip-brand-image').naturalWidth>0")
                         no_overflow(page, name + ' saved logo')
 
+                        page.locator('#clip-source-mode').select_option('upload')
                         page.locator('#clip-upload input[name="video"]').set_input_files(str(ROOT/'features/clip_studio/app/assets/example-clip.mp4'))
                         page.locator('#clip-upload input[name="permission_confirmed"]').check()
                         page.get_by_role('button', name='Make my clip', exact=True).click()

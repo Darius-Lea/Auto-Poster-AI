@@ -10,14 +10,42 @@
   const config=JSON.parse(document.getElementById('clip-config')?.textContent || '{"pages":[]}');
   const canRender=form.dataset.canRender==='true';
   const sourceMode=document.getElementById('clip-source-mode');
-  sourceMode?.addEventListener('change',()=>{
-    const link=sourceMode.value==='link';
-    const file=form.querySelector('[name="video"]'), url=form.querySelector('[name="video_url"]');
-    file.disabled=link || !canRender; file.required=!link;
-    url.disabled=!link || !canRender; url.required=link;
-    for (const [id,show] of [['clip-video-file',!link],['clip-video-link',link]]) {
-      const box=document.getElementById(id);box.hidden=!show;box.style.display=show?'':'none';
-    }
+  const sourceFile=form.querySelector('[name="video"]');
+  const sourceUrl=form.querySelector('[name="video_url"]');
+  const linkStatus=document.getElementById('clip-link-status');
+  const checkLink=document.getElementById('clip-check-link');
+  function updateSourceMode() {
+    const link=sourceMode?.value!=='upload';
+    // Readiness controls processing, never the user's ability to paste a link.
+    sourceUrl.disabled=false;sourceUrl.readOnly=false;sourceUrl.required=link;
+    sourceFile.disabled=false;sourceFile.required=!link;
+    const linkBox=document.getElementById('clip-video-link');
+    linkBox.hidden=false;linkBox.style.display='';
+    const fileBox=document.getElementById('clip-video-file');
+    fileBox.hidden=link;fileBox.style.display=link?'none':'';
+  }
+  sourceMode?.addEventListener('change',updateSourceMode);
+  for(const name of ['input','paste']) sourceUrl.addEventListener(name,()=>{
+    if(sourceMode)sourceMode.value='link';
+    updateSourceMode();
+    if(linkStatus)linkStatus.textContent='';
+  });
+  sourceUrl.addEventListener('focus',()=>{
+    if(sourceUrl.value.trim() && sourceMode){sourceMode.value='link';updateSourceMode();}
+  });
+  updateSourceMode();
+  let linkCheckRevision=0;
+  checkLink?.addEventListener('click',async()=>{
+    const candidate=sourceUrl.value.trim();
+    const revision=++linkCheckRevision;
+    if(!candidate){sourceUrl.focus();linkStatus.textContent='Paste a video link first.';return;}
+    checkLink.disabled=true;linkStatus.textContent='Checking your link…';
+    try{
+      const data=await action('/clips/source/check',{video_url:candidate});
+      if(revision===linkCheckRevision && sourceUrl.value.trim()===candidate)linkStatus.textContent=data.message || 'Link checked. Review the service status before making your clip.';
+    }catch(error){
+      if(revision===linkCheckRevision && sourceUrl.value.trim()===candidate)linkStatus.textContent=error.message;
+    }finally{if(revision===linkCheckRevision)checkLink.disabled=false;}
   });
   let polling = false;
   const mode = form.querySelector('[name="mode"]');
@@ -141,9 +169,11 @@
   form.addEventListener('submit', async event => {
     event.preventDefault();
     const button = document.getElementById('clip-submit'); button.disabled = true;
-    status.textContent = 'Uploading and checking your video. Keep this page open until it is queued.';
+    status.textContent = sourceMode?.value==='upload' ? 'Uploading and checking your video. Keep this page open until it is queued.' : 'Checking your video link and preparing its import…';
     try {
-      await request('/clips/jobs', {method: 'POST', body: new FormData(form)});
+      const body=new FormData(form);
+      if(sourceMode?.value==='upload')body.delete('video_url');else body.delete('video');
+      await request('/clips/jobs', {method: 'POST', body});
       status.textContent = 'Your clip is queued. You can leave and return while it renders.';
       form.querySelector('[name="video"]').value = '';
       await refresh();

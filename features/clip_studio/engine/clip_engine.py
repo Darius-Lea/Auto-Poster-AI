@@ -263,79 +263,199 @@ def _tok(w):
     return w.lower().strip('.,!?;:"()')
 
 def score_span(span):
-    """Transparent hook-strength score for a list of word dicts."""
+    """Explainable transcript quality signals, not predicted audience engagement.
+
+    Counts are capped and repetition is penalized so a long list of numbers,
+    money words or dramatic adjectives cannot win simply by saying them again.
+    """
     if not span:
         return -1e9, {}
     text = ' '.join(w['w'] for w in span)
-    low = [_tok(w['w']) for w in span]
+    low = [_tok(w['w']).strip("'’“”[]{}") for w in span]
+    tokens = [token for token in low if token]
+    unique = set(tokens)
+    opening = tokens[:16]
+    first = tokens[0] if tokens else ''
     feats = {}
-    nums = sum(1 for t in low if any(c.isdigit() for c in t) or t in NUM_WORDS)
-    feats['numbers'] = nums * 3.0
-    feats['money'] = len(MONEY_RE.findall(text)) * 2.0
-    feats['superlatives'] = min(sum(t in SUPERLATIVES for t in low), 4) * 1.2
-    feats['claims'] = min(sum(t in CLAIM_WORDS for t in low), 4) * 1.2
-    feats['story'] = min(sum(t in STORY_WORDS for t in low), 3) * 1.6
-    feats['question'] = 2.0 if '?' in text else 0.0
-    dur = span[-1]['e'] - span[0]['s']
-    wps = len(span) / max(dur, 0.1)
-    feats['density'] = 1.5 if 2.0 <= wps <= 3.4 else (0.0 if wps >= 1.4 else -2.0)
-    gaps = [span[i + 1]['s'] - span[i]['e'] for i in range(len(span) - 1)]
-    feats['pauses'] = -2.0 if gaps and max(gaps) > 1.2 else 0.0
-    feats['clean_end'] = 2.0 if span[-1]['w'].rstrip().endswith(('.', '!', '?')) else 0.0
-    feats['intro_penalty'] = -3.0 * sum(t in INTRO_WORDS for t in low[:6])
+    number_signals = {token for token in unique
+                      if any(char.isdigit() for char in token) or token in NUM_WORDS}
+    feats['numbers'] = min(len(number_signals), 2) * 0.6
+    feats['money'] = min(len({match.group(0).lower()
+                              for match in MONEY_RE.finditer(text)}), 2) * 0.2
+    feats['superlatives'] = min(len(unique & SUPERLATIVES), 2) * 0.25
+    feats['claims'] = min(len(unique & (CLAIM_WORDS - {'have', 'no', 'need', 'must'})), 2) * 0.6
+    feats['story'] = min(len(unique & STORY_WORDS), 3) * 0.9
+    feats['question'] = 1.3 if '?' in text else 0.0
+    feats['opening_hook'] = (1.8 if first in {'how', 'why', 'what', 'when'} else 0.0)
+    feats['opening_hook'] += min(len(set(opening) & {'mistake', 'learned', 'example', 'lesson', 'problem'}), 2) * 0.8
+    feats['explanation'] = min(len(unique & {'because', 'instead', 'learned', 'lesson', 'result', 'finally', 'means', 'therefore'}), 3) * 1.0
+    feats['practical'] = min(len(unique & {'example', 'step', 'steps', 'try', 'use', 'check', 'choose', 'repeat', 'practice'}), 3) * 0.7
+    # These openings frequently require the missing previous sentence. Personal
+    # stories beginning with I/we/you remain valid self-contained openings.
+    context = {'and', 'but', 'so', 'then', 'which', 'that', 'it', 'they', 'he', 'she', 'these', 'those', 'also', 'them', 'anyway'}
+    feats['context_opening'] = -2.5 if first in context else 0.0
+    duration = max(float(word['e']) for word in span) - float(span[0]['s'])
+    wps = len(tokens) / max(duration, 0.1)
+    feats['density'] = 1.0 if 1.1 <= wps <= 3.5 else (-2.5 if wps < 0.7 else (-1.0 if wps > 4.5 else 0.0))
+    gaps = [max(0.0, float(span[i + 1]['s']) - float(span[i]['e']))
+            for i in range(len(span) - 1)]
+    long_silence = sum(gap for gap in gaps if gap > 1.2)
+    feats['pauses'] = -min(6.0, long_silence / max(duration, 0.1) * 12.0)
+    feats['clean_end'] = 2.5 if re.search(r'[.!?][\"\'”’)}\]]*$', span[-1]['w'].rstrip()) else 0.0
+    feats['intro_penalty'] = -min(6.0, sum(token in INTRO_WORDS for token in opening) * 2.0)
+    lowered = text.lower()
+    promos = ('thanks for watching', 'like and subscribe', 'remember to subscribe',
+              'our sponsor', 'sponsored by', 'brought to you by', 'use code',
+              'link in the description')
+    feats['promotion'] = -5.0 if any(phrase in lowered for phrase in promos) else 0.0
+    stop = {'a', 'an', 'the', 'of', 'to', 'at', 'in', 'on', 'for', 'and', 'or',
+            'but', 'so', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has',
+            'had', 'i', 'we', 'you', 'it', 'that', 'this', 'with', 'as', 'my', 'your'}
+    content = [token for token in tokens if token not in stop]
+    ratio = len(set(content)) / max(len(content), 1)
+    feats['repetition'] = -min(8.0, max(0.0, 0.5 - ratio) * 20.0) if len(content) >= 8 else 0.0
+    feats['too_short'] = -3.0 if len(tokens) < 5 else 0.0
     return sum(feats.values()), feats
 
+
 def split_sentences(words):
-    sents, cur = [], []
-    for w in words:
-        cur.append(w)
-        if w['w'].rstrip().endswith(('.', '!', '?')):
-            sents.append(cur); cur = []
-    if cur:
-        sents.append(cur)
-    return sents
+    """Natural spoken units: terminal punctuation or a substantial pause."""
+    sentences, current = [], []
+    abbreviations = {'mr.', 'mrs.', 'ms.', 'dr.', 'prof.', 'e.g.', 'i.e.', 'u.s.'}
+    for index, word in enumerate(words):
+        current.append(word)
+        token = word['w'].rstrip()
+        terminal = bool(re.search(r'[.!?][\"\'”’)}\]]*$', token)) and token.lower() not in abbreviations
+        pause = (index + 1 < len(words)
+                 and float(words[index + 1]['s']) - float(word['e']) >= 0.65)
+        if terminal or pause:
+            sentences.append(current)
+            current = []
+    if current:
+        sentences.append(current)
+    return sentences
+
 
 def pick_window(words, target):
-    """Sliding windows over word boundaries; returns (candidates, chosen)."""
-    cands = []
-    n = len(words)
-    for i in range(n):
-        s = words[i]['s']
-        j = i
-        while j + 1 < n and words[j + 1]['e'] - s <= target * 1.15:
-            j += 1
-        span = words[i:j + 1]
-        dur = span[-1]['e'] - s
-        if dur < target * 0.75:
+    """Rank complete, bounded spoken moments; keep the CLI candidate contract.
+
+    Candidate anchors are sentence/pause boundaries rather than every word.
+    Two-pointer duration bounds and a small fixed number of endings per anchor
+    keep long recordings practical. Unpunctuated runs get spaced fallback
+    anchors, but a complete thought is preferred to a mid-sentence crop.
+    """
+    from bisect import bisect_right
+    try:
+        target = float(target)
+    except (TypeError, ValueError):
+        raise SystemExit('Choose a finite, positive clip length.') from None
+    if not math.isfinite(target) or target <= 0:
+        raise SystemExit('Choose a finite, positive clip length.')
+    if not words:
+        raise SystemExit('No speech was found to select a clip.')
+    previous_start = -1.0
+    ends = []
+    for word in words:
+        try:
+            begin, finish = float(word['s']), float(word['e'])
+            text = word['w']
+            if (not math.isfinite(begin) or not math.isfinite(finish)
+                    or begin < 0 or finish <= begin or begin < previous_start
+                    or not isinstance(text, str) or not text.strip()):
+                raise ValueError
+        except (KeyError, TypeError, ValueError):
+            raise SystemExit('The transcript contains invalid speech timings.') from None
+        previous_start = begin
+        ends.append(max(ends[-1] if ends else finish, finish))
+    if not any(any(char.isalnum() for char in word['w']) for word in words):
+        raise SystemExit('No speech was found to select a clip.')
+    units = split_sentences(words)
+    natural_starts, natural_ends = set(), []
+    offset = 0
+    for unit in units:
+        natural_starts.add(offset)
+        offset += len(unit)
+        natural_ends.append(offset - 1)
+    natural_end_set = set(natural_ends)
+    starts = set(natural_starts)
+    # A whole paragraph may have no punctuation. Add phrase boundaries and
+    # spaced anchors only inside such long units, not to ordinary sentences.
+    offset = 0
+    for unit in units:
+        unit_begin = float(unit[0]['s'])
+        if float(unit[-1]['e']) - unit_begin > target:
+            last_anchor = unit_begin
+            for local, word in enumerate(unit[1:], 1):
+                prior = unit[local - 1]
+                age = float(word['s']) - last_anchor
+                phrase = prior['w'].rstrip().endswith((',', ';', ':')) or float(word['s']) - float(prior['e']) >= 0.25
+                if age >= target * 0.45 and (phrase or age >= target * 0.8):
+                    starts.add(offset + local)
+                    last_anchor = float(word['s'])
+        offset += len(unit)
+    candidates = []
+    seen = set()
+    minimum = min(target * 0.5, 12.0)
+    source_short = ends[-1] - float(words[0]['s']) <= target
+    for begin_index in sorted(starts):
+        start = float(words[begin_index]['s'])
+        maximum = bisect_right(ends, start + target + 1e-9) - 1
+        if maximum < begin_index:
             continue
-        sc, feats = score_span(span)
-        # prefer ending exactly on a sentence boundary near the target
-        if abs(dur - target) <= target * 0.12:
-            sc += 0.8
-        cands.append({'i': i, 'j': j, 's': s, 'e': span[-1]['e'],
-                      'score': round(sc, 2), 'feats': feats, 'span': span})
-        if words[-1]['e'] - s < target * 0.75:
-            break
-    if not cands:
-        span = words
-        sc, feats = score_span(span)
-        cands = [{'i': 0, 'j': n - 1, 's': span[0]['s'], 'e': span[-1]['e'],
-                  'score': round(sc, 2), 'feats': feats, 'span': span}]
-    cands.sort(key=lambda c: -c['score'])
-    # de-duplicate near-identical windows for the top-3 printout
-    top, seen = [], []
-    for c in cands:
-        if all(abs(c['s'] - s0) > 4.0 for s0 in seen):
-            top.append(c); seen.append(c['s'])
+        boundary_position = bisect_right(natural_ends, maximum) - 1
+        choices = []
+        # Consider nearby completed thoughts, rather than blindly filling the
+        # requested duration with the start of the following sentence.
+        for position in range(boundary_position, max(-1, boundary_position - 4), -1):
+            finish_index = natural_ends[position]
+            if finish_index < begin_index:
+                break
+            if ends[finish_index] - start >= minimum or source_short:
+                choices.append(finish_index)
+        if not choices:
+            choices = [maximum]
+        for finish_index in choices:
+            identity = (begin_index, finish_index)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            end = ends[finish_index]
+            duration = end - start
+            if duration < minimum and not source_short:
+                continue
+            span = words[begin_index:finish_index + 1]
+            score, features = score_span(span)
+            features['natural_start'] = 1.5 if begin_index in natural_starts else -1.5
+            terminal = bool(re.search(r'[.!?][\"\'”’)}\]]*$', span[-1]['w'].rstrip()))
+            natural_end = finish_index in natural_end_set
+            # The transcript's final unpunctuated word is not necessarily a
+            # finished sentence, but it is the only available source ending.
+            features['natural_end'] = 2.0 if terminal else (0.8 if natural_end else -4.0)
+            features['duration_fit'] = min(duration / target, 1.0) * 2.0
+            if duration < target * 0.5:
+                features['duration_fit'] -= 1.5
+            score += features['natural_start'] + features['natural_end'] + features['duration_fit']
+            candidates.append({'i':begin_index, 'j':finish_index, 's':start, 'e':end,
+                               'score':round(score, 2), 'feats':features, 'span':span})
+    if not candidates:
+        raise SystemExit('No complete speech word fits inside the requested clip length.')
+    candidates.sort(key=lambda candidate: (-candidate['score'],
+        abs((candidate['e'] - candidate['s']) - target), candidate['s']))
+    top = []
+    for candidate in candidates:
+        if all(candidate['e'] <= selected['s'] or candidate['s'] >= selected['e']
+               for selected in top):
+            top.append(candidate)
         if len(top) == 3:
             break
-    return top, cands[0]
+    return top, candidates[0]
+
 
 def peak_sentence(span):
-    sents = [s for s in split_sentences(span) if len(s) >= 4]
-    if not sents:
+    sentences = [sentence for sentence in split_sentences(span) if len(sentence) >= 4]
+    if not sentences:
         return span
-    return max(sents, key=lambda s: score_span(s)[0])
+    return max(sentences, key=lambda sentence: score_span(sentence)[0])
 
 def derive_hook(peak):
     """<=9-word hook from the peak sentence: pick the contiguous span with
