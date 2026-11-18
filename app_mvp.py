@@ -42,6 +42,11 @@ _MAINTENANCE_THREADS = {}
 _MAINTENANCE_LAST = {}
 _BOOTSTRAP_LOCK = threading.RLock()
 _INITIALIZED_DATABASES = set()
+_STORAGE_INDEPENDENT_ENDPOINTS = frozenset({
+    'static', 'manifest', 'app_icon', 'version_info', 'public_website',
+    'public_onboarding', 'pwa.install_page', 'pwa.service_worker',
+    'pwa.offline_page', 'clips.example', 'help.guide', 'help.privacy', 'help.terms',
+})
 
 
 def _same_secret(a, b):
@@ -138,7 +143,10 @@ def ensure_database_ready():
     key=_database_key()
     if key in _INITIALIZED_DATABASES:
         return
-    with _BOOTSTRAP_LOCK:
+    if not _BOOTSTRAP_LOCK.acquire(timeout=2):
+        raise customer_accounts.AuthStorageUnavailable(
+            'Account access is temporarily unavailable. Please try again in a moment.')
+    try:
         if key in _INITIALIZED_DATABASES:
             return
         # Fail promptly if an existing database is currently write-locked,
@@ -147,6 +155,8 @@ def ensure_database_ready():
             connection.execute('BEGIN IMMEDIATE')
             connection.rollback()
         init_db()
+    finally:
+        _BOOTSTRAP_LOCK.release()
 
 
 def current_workspace():
@@ -174,6 +184,8 @@ def is_owner():
 
 @app.context_processor
 def account_context():
+    if request.endpoint in _STORAGE_INDEPENDENT_ENDPOINTS:
+        return {'customer_account':None, 'owner_workspace':False, 'workspace_id':'owner'}
     unavailable=getattr(g,'storage_unavailable',False)
     user=customer_accounts.get(session.get("account_id")) if session.get("authorized") and not unavailable else None
     if user and int(session.get("auth_version",0)) != int(user.get("auth_version",0)):
@@ -714,6 +726,8 @@ def logout():
 
 @app.before_request
 def protect():
+    if request.method in ('GET', 'HEAD', 'OPTIONS') and request.endpoint in _STORAGE_INDEPENDENT_ENDPOINTS:
+        return
     if request.endpoint and (session.get('authorized') is True or request.method not in ('GET','HEAD','OPTIONS')):
         ensure_database_ready()
     if request.endpoint in ("login", "account", "static", "stripe_webhook", "manifest", "app_icon", "legacy_claim", "public_website", "public_onboarding", "launch.begin", "launch.build", "launch.export_plan", "account_support.forgot_password", "account_support.reset_password", "account_support.verify_email", "help.guide", "help.privacy", "help.terms", "pwa.install_page", "pwa.service_worker", "pwa.offline_page", "clips.example", "version_info"):
