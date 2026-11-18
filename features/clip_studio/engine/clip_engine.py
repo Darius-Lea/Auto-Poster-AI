@@ -1614,7 +1614,9 @@ def wrap_cue(draw, toks, font, max_w=980):
 def render_text_frames(workdir, total, main_d, cues, hook_toks, title,
                        cap_y=1450, hook_y=196, hook_max_size=104,
                        hook_max_lines=3, hide_title_with_hook=False,
-                       accent=AMBER, style='standard', eye_limit=None):
+                       accent=AMBER, style='standard', eye_limit=None,
+                       font_family='manrope', caption_size='balanced',
+                       caption_position='lower'):
     """PIL text layer at TXT_FPS. Defaults are the cutaway geometry
     (captions low-centre, hook under the top attribution). Split layout
     passes cap_y centred on the seam, a higher/smaller hook, and hides
@@ -1632,15 +1634,27 @@ def render_text_frames(workdir, total, main_d, cues, hook_toks, title,
     the speaker's forehead/eyes."""
     from PIL import Image, ImageDraw, ImageFont
     fd = ASSETS
+    if font_family not in ('inter', 'manrope') or caption_size not in ('compact', 'balanced', 'large') or caption_position not in ('lower', 'center'):
+        raise ValueError('Choose a supported video font, caption size and position.')
     def mfont(size):
-        f = ImageFont.truetype(os.path.join(fd, 'Manrope.ttf'), size)
-        f.set_variation_by_name('ExtraBold')
+        if font_family == 'inter':
+            f = ImageFont.truetype(os.path.join(fd, 'Inter.ttf'), size)
+            f.set_variation_by_axes([32, 700])
+        else:
+            f = ImageFont.truetype(os.path.join(fd, 'Manrope.ttf'), size)
+            f.set_variation_by_name('ExtraBold')
         return f
     def ifont(size):
         f = ImageFont.truetype(os.path.join(fd, 'Inter.ttf'), size)
         f.set_variation_by_axes([32, 600])
         return f
-    cap_f, attr_f = mfont(62), ifont(30)
+    caption_pixels = {'compact':52, 'balanced':62, 'large':72}[caption_size]
+    cap_f, attr_f = mfont(caption_pixels), ifont(30)
+    if caption_position == 'center':
+        # Keep upper caption placement below detected eyes and within safe
+        # social-video margins; lower placement retains the layout geometry.
+        cap_y = max(1050, int(eye_limit + 130) if eye_limit is not None else 1050)
+    cap_y = min(1540, max(900, cap_y))
     tmp = ImageDraw.Draw(Image.new('RGBA', (10, 10)))
     # ---- hook fit: <=990px per line, <=hook_max_lines lines, and
     # the whole block must clear the speaker's eye line (eye_limit).
@@ -1814,7 +1828,7 @@ def render_text_frames(workdir, total, main_d, cues, hook_toks, title,
                 ld = ImageDraw.Draw(layer)
                 toks = [w for (w, _s, _e) in cwords]
                 lines = wrap_cue(ld, toks, cap_f)
-                lh, idx = 80, 0
+                lh, idx = round(caption_pixels * 1.3), 0
                 y0 = 170 - (len(lines) * lh) // 2
                 for li, line in enumerate(lines):
                     x = (OUT_W - ld.textlength(' '.join(line), font=cap_f)) / 2
@@ -1836,8 +1850,8 @@ def render_text_frames(workdir, total, main_d, cues, hook_toks, title,
                         # minimal marks the spoken word with an accent
                         # underline instead of a colour change
                         ax, aw = act_box
-                        ld.rectangle([ax, y0 + li * lh + 70,
-                                      ax + aw, y0 + li * lh + 77],
+                        ld.rectangle([ax, y0 + li * lh + caption_pixels + 8,
+                                      ax + aw, y0 + li * lh + caption_pixels + 15],
                                      fill=accent)
                 if fade < 1.0:
                     layer.putalpha(layer.split()[3].point(lambda v: int(v * fade)))
@@ -2568,6 +2582,9 @@ def main():
                          "end-card styling); 'random' picks one from "
                          "a seeded RNG (see --seed) and records both "
                          "in the build log")
+    ap.add_argument('--font-family', choices=('inter','manrope'), default='manrope')
+    ap.add_argument('--caption-size', choices=('compact','balanced','large'), default='balanced')
+    ap.add_argument('--caption-position', choices=('lower','center'), default='lower')
     ap.add_argument('--seed', type=int, default=None,
                     help='seed for --style random (default: derived '
                          'from the clock, recorded in the build log)')
@@ -2601,7 +2618,9 @@ def main():
     os.makedirs(runs_root, exist_ok=True)
     workdir = tempfile.mkdtemp(prefix='clip-engine-', dir=runs_root)
     log(f'workdir {workdir}')
-    build = {'input': args.input, 'tool': 'clip-engine v1'}
+    build = {'input': args.input, 'tool': 'clip-engine v1',
+             'font_family': args.font_family, 'caption_size': args.caption_size,
+             'caption_position': args.caption_position}
     # ---- brand kit + style register (fail fast, before the
     # expensive stages); both are recorded so the clip is
     # reproducible from its build log alone
@@ -2838,13 +2857,15 @@ def main():
                 cap_y=SEAM_Y - 170, hook_y=52, hook_max_size=84,
                 hook_max_lines=2, hide_title_with_hook=True,
                 accent=brand['accent'], style=style_name,
-                eye_limit=eye_limit)
+                eye_limit=eye_limit, font_family=args.font_family,
+                caption_size=args.caption_size, caption_position=args.caption_position)
         else:
             fdir = render_text_frames(workdir, total, main_d, cues,
                                       hook_toks, title,
                                       accent=brand['accent'],
                                       style=style_name,
-                                      eye_limit=eye_limit)
+                                      eye_limit=eye_limit, font_family=args.font_family,
+                                      caption_size=args.caption_size, caption_position=args.caption_position)
         # ---- join + composite + QA GATE (one repair attempt allowed)
         if panels is not None:
             piece_counts = [round((we - ws) * FPS)]

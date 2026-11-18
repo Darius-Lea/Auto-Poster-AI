@@ -98,6 +98,7 @@
       sharing.append(element('p', 'Choose Download video. On a phone, look in your browser’s Downloads or the Downloads folder in Files. Open the social app where you want to share it, switch to the correct business Page or account, choose its video or Reel creation option, and select the downloaded video. Review the caption and audience before you publish.'));
       card.append(sharing);
       card.append(publishingForm(job));
+      card.append(designEditor(job));
       const edit = element('details');
       edit.append(element('summary', 'Correct captions and make a revised clip'));
       edit.append(element('p', 'Correct any words below. We keep their timing for you. A revision uses one render attempt and leaves the original clip available.'));
@@ -180,6 +181,30 @@
     } catch (error) { status.textContent = error.message; }
     finally { button.disabled = !canRender; }
   });
+  function designEditor(job) {
+    const box=element('details');box.append(element('summary','Edit video look and fonts'));
+    box.append(element('p','Make a new version with your chosen typography and brand color. The original clip and caption corrections are kept.'));
+    const editor=element('form');editor.dataset.clipDesign=job.id;
+    const values={};
+    for(const [name,title,options] of [
+      ['style','Caption design',[['standard','Bold captions'],['bar','Headline frame'],['minimal','Quiet captions']]],
+      ['font_family','Caption font',[['inter','Inter · clean and precise'],['manrope','Manrope · rounded and bold']]],
+      ['caption_size','Caption size',[['compact','Compact'],['balanced','Balanced'],['large','Large']]],
+      ['caption_position','Caption placement',[['lower','Lower safe area'],['center','Middle safe area']]]]) {
+      const select=labeled(editor,title,element('select'));select.name=name;
+      for(const [value,label] of options){const option=element('option',label);option.value=value;select.append(option);}
+      select.value=job.options[name] || ({style:'standard',font_family:'inter',caption_size:'balanced',caption_position:'lower'}[name]);values[name]=select;
+    }
+    const accent=labeled(editor,'Accent color',element('input'));accent.name='accent';accent.type='color';accent.value=job.options.accent || '#a7f36a';values.accent=accent;
+    const approve=labeled(editor,'I reviewed these design changes.',element('input'));approve.type='checkbox';approve.required=true;
+    const button=element('button','Render my new look');button.type='submit';editor.append(button);
+    const notice=element('p');notice.setAttribute('role','status');editor.append(notice);
+    editor.addEventListener('submit',async event=>{event.preventDefault();button.disabled=true;
+      try{const changes={confirmed:approve.checked?'yes':'no'};for(const [key,control] of Object.entries(values))changes[key]=control.value;
+        await action('/clips/jobs/'+job.id+'/style',changes);notice.textContent='Your revised look is queued. The original stays available.';await refresh();
+      }catch(error){notice.textContent=error.message;}finally{button.disabled=false;}});
+    box.append(editor);return box;
+  }
   let controlIndex=0;
   function labeled(parent,label,node) {
     const wrapper=element('div'), title=element('label',label);

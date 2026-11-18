@@ -21,6 +21,10 @@ clip_bp = Blueprint('clips', __name__)
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 _EXTENSIONS = {'.mp4', '.mov', '.mkv', '.webm', '.m4v'}
 _ID = re.compile(r'[0-9a-f]{32}\Z')
+_STYLES = ('standard', 'bar', 'minimal')
+_FONTS = ('inter', 'manrope')
+_CAPTION_SIZES = ('compact', 'balanced', 'large')
+_CAPTION_POSITIONS = ('lower', 'center')
 
 
 def upload_limit():
@@ -153,6 +157,20 @@ def probe_source(path):
         raise ValueError('Choose a readable video with speech audio, between 15 seconds and 90 minutes long.') from None
 
 
+def _typography(form, defaults=None):
+    defaults = defaults or {}
+    choices = {'style': (_STYLES, 'standard'), 'font_family': (_FONTS, 'inter'),
+               'caption_size': (_CAPTION_SIZES, 'balanced'),
+               'caption_position': (_CAPTION_POSITIONS, 'lower')}
+    selected = {}
+    for name, (allowed, fallback) in choices.items():
+        value = form.get(name, defaults.get(name, fallback))
+        if not isinstance(value, str) or value not in allowed:
+            raise ValueError('Choose one of the available designs, fonts and caption settings.')
+        selected[name] = value
+    return selected
+
+
 def _options(form):
     try:
         duration = float(form.get('duration', 45))
@@ -163,8 +181,8 @@ def _options(form):
         raise ValueError('Choose a clip between 15 and 60 seconds and a nonnegative start time.')
     mode = form.get('mode', 'auto')
     layout = form.get('layout', 'cutaway')
-    style = form.get('style', 'standard')
-    if mode not in ('auto', 'manual') or layout not in ('cutaway', 'split') or style not in ('standard', 'bar', 'minimal'):
+    design = _typography(form)
+    if mode not in ('auto', 'manual') or layout not in ('cutaway', 'split'):
         raise ValueError('Choose one of the available clip styles and layouts.')
     title = form.get('title', '').strip()
     hook = form.get('hook', '').strip()
@@ -174,7 +192,7 @@ def _options(form):
         raise ValueError('Keep the business name under 80 characters and choose a valid brand color.')
     if len(title) > 100 or len(hook) > 160 or any(ord(x) < 32 for x in title + hook):
         raise ValueError('Keep the title under 100 characters and hook under 160, on one line.')
-    options = {'duration': duration, 'layout': layout, 'style': style, 'title': title or brand_name, 'hook': hook,
+    options = {'duration': duration, 'layout': layout, **design, 'title': title or brand_name, 'hook': hook,
                'brand_name': brand_name or title or 'Your video', 'accent': accent.upper()}
     if mode == 'manual':
         options.update(start=start, end=start + duration)
@@ -392,6 +410,97 @@ def _validate_captions(text, duration):
     return text
 
 
+def _prepare_revision(workspace, parent, options, captions, *, brand_changes=None):
+    """Freeze a new edit without changing the original clip or re-transcribing."""
+    original = job_dir(parent['id'])
+    inputs = [original / ('source' + parent['source_ext']),
+              original / 'output' / 'clip.transcript.json']
+    for path in inputs:
+        if not path.is_file() or path.is_symlink():
+            raise ValueError('This clip no longer has reusable source files. Create a new clip instead.')
+    moment = json.loads(parent['summary_json']).get('moment') or {}
+    if 'start' in moment and 'end' in moment:
+        try:
+            start, end = float(moment['start']), float(moment['end'])
+        except (TypeError, ValueError):
+            raise ValueError('This clip has no reusable time window. Create a new clip instead.') from None
+        if not math.isfinite(start) or not math.isfinite(end) or not 0 <= start < end <= parent['source_duration'] + 1:
+            raise ValueError('This clip has no reusable time window. Create a new clip instead.')
+        options.update(start=start, end=end)
+    elif options.get('start') is None or options.get('end') is None:
+        raise ValueError('This clip has no reusable time window. Create a new clip instead.')
+    child = None
+    try:
+        child, folder = _reserve(workspace, parent['source_ext'], options,
+                                 parent['source_duration'], parent['caption_revision'] + 1)
+        shutil.copyfile(inputs[0], folder / ('source' + parent['source_ext']))
+        shutil.copyfile(inputs[1], folder / 'transcript.json')
+        brand = original / 'brand'
+        if brand.is_dir():
+            if brand.is_symlink() or any(path.is_symlink() for path in brand.rglob('*')):
+                raise ValueError('This clip’s brand files cannot be reused. Create a new clip instead.')
+            shutil.copytree(brand, folder / 'brand')
+        else:
+            import clip_branding
+            clip_branding.snapshot_brand(workspace, folder,
+                name=options.get('brand_name', 'Your video'), accent=options.get('accent', '#A7F36A'))
+        if brand_changes:
+            kit_path = folder / 'brand' / 'kit.json'
+            kit = json.loads(kit_path.read_text(encoding='utf-8'))
+            kit.update(brand_changes)
+            kit_path.write_text(json.dumps(kit, ensure_ascii=False), encoding='utf-8')
+        (folder / 'edited.srt').write_text(captions, encoding='utf-8')
+        with connect() as c:
+            c.execute("UPDATE clip_jobs SET status='queued',updated=? WHERE id=? AND status='uploading'",
+                      (int(time.time()), child))
+        return _public(_owned(child, workspace))
+    except Exception:
+        if child:
+            _validation_failed(child, 'The revision could not be prepared. Your original clip is unchanged.')
+            shutil.rmtree(job_dir(child), ignore_errors=True)
+        raise
+
+
+@clip_bp.route('/clips/jobs/<identifier>/style', methods=['POST'])
+def revise_style(identifier):
+    workspace = actor()
+    _csrf()
+    unavailable = _can_render()
+    if unavailable:
+        return jsonify(error=unavailable[0]), unavailable[1]
+    parent = _owned(identifier, workspace)
+    if parent['status'] != 'ready':
+        return jsonify(error='Wait for the first clip to finish before editing its design.'), 409
+    if request.form.get('confirmed') != 'yes':
+        return jsonify(error='Confirm the design changes before making a revised clip.'), 400
+    try:
+        options = json.loads(parent['options_json'])
+        options.update(_typography(request.form, options))
+        for field, maximum in (('title', 100), ('hook', 160), ('business_name', 80)):
+            if field not in request.form:
+                continue
+            value = request.form[field].strip()
+            if len(value) > maximum or any(ord(char) < 32 or ord(char) == 127 for char in value):
+                raise ValueError('Use a short, single-line business name, title and opening hook.')
+            options['brand_name' if field == 'business_name' else field] = value
+        accent = request.form.get('accent', options.get('accent', '#A7F36A')).strip()
+        if not re.fullmatch(r'#[0-9A-Fa-f]{6}', accent):
+            raise ValueError('Choose a valid brand color.')
+        options['accent'] = accent.upper()
+        path = job_dir(identifier) / 'output' / 'clip.srt'
+        if not path.is_file() or path.is_symlink() or path.stat().st_size > 30000:
+            raise ValueError('This clip has no reusable captions. Create a new clip instead.')
+        edited = _validate_captions(path.read_text(encoding='utf-8'), options['duration'])
+        name = options.get('brand_name') or 'Your video'
+        job = _prepare_revision(workspace, parent, options, edited,
+            brand_changes={'name': name, 'end_card_name': name, 'accent': options['accent']})
+        return jsonify(job=job), 202
+    except (ValueError, PermissionError) as exc:
+        return jsonify(error=str(exc)), 429 if isinstance(exc, PermissionError) else 400
+    except (OSError, KeyError, TypeError, UnicodeError):
+        return jsonify(error='The revision could not be prepared. Your original clip is unchanged.'), 400
+
+
 @clip_bp.route('/clips/jobs/<identifier>/captions', methods=['POST'])
 def captions(identifier):
     workspace = actor()
@@ -542,7 +651,7 @@ def process_next_job():
         if (result.get('summary') or {}).get('qa_status') != 'pass' or not all((output / name).is_file() for name in ('clip.mp4','clip.srt','clip.transcript.json')):
             raise ValueError('The clip did not pass its output checks.')
         # Never expose raw build logs, source paths, provider details or local files.
-        summary = {key: (result.get('summary') or {}).get(key) for key in ('hook','peak_line','loudness_lufs','true_peak_dbtp','qa_status','style','brand','moment')}
+        summary = {key: (result.get('summary') or {}).get(key) for key in ('hook','peak_line','loudness_lufs','true_peak_dbtp','qa_status','style','brand','moment','font_family','caption_size','caption_position')}
         (output / 'summary.json').write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding='utf-8')
         with connect() as c:
             c.execute("UPDATE clip_jobs SET status='ready',summary_json=?,updated=? WHERE id=?", (json.dumps(summary), int(time.time()), row['id']))

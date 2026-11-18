@@ -94,6 +94,9 @@ def summarize(build: Optional[dict]) -> Optional[dict]:
         "style": (build.get("style") or {}).get("name"),
         "brand": (build.get("brand") or {}).get("name"),
         "moment": build.get("moment"),
+        "font_family": build.get("font_family"),
+        "caption_size": build.get("caption_size"),
+        "caption_position": build.get("caption_position"),
     }
 
 
@@ -154,6 +157,12 @@ def render_clip(source: str, options: Optional[dict] = None,
         raise ClipStudioError("Choose a supported clip layout.")
     if options.get('style', 'standard') not in ('standard', 'bar', 'minimal', 'random'):
         raise ClipStudioError("Choose a supported clip style.")
+    typography = {'font_family': ('inter', 'manrope'),
+                  'caption_size': ('compact', 'balanced', 'large'),
+                  'caption_position': ('lower', 'center')}
+    for key, choices in typography.items():
+        if key in options and options[key] not in choices:
+            raise ClipStudioError("Choose one of the available caption fonts, sizes and positions.")
     out_dir = os.path.abspath(out_dir or os.path.join(
         DEFAULT_OUT_DIR, uuid.uuid4().hex))
     os.makedirs(out_dir, exist_ok=True)
@@ -170,6 +179,9 @@ def render_clip(source: str, options: Optional[dict] = None,
         cmd += ["--auto", "--duration", str(options.get("duration") or 45)]
     cmd += ["--layout", options.get("layout") or "cutaway"]
     cmd += ["--style", options.get("style") or "standard"]
+    for key in typography:
+        if key in options:
+            cmd += ['--' + key.replace('_', '-'), options[key]]
     if options.get("seed") is not None:
         cmd += ["--seed", str(options["seed"])]
     if options.get("brand"):
