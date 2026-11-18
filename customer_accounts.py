@@ -13,6 +13,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 class AuthStorageUnavailable(RuntimeError):
     """A safe retryable account-service failure; details stay in server logs."""
 
+    def __init__(self, message, *, retryable=False):
+        super().__init__(message)
+        self.retryable = retryable
+
 
 _UNAVAILABLE = 'Account access is temporarily unavailable. Please try again in a moment.'
 

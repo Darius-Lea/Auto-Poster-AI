@@ -28,6 +28,7 @@ import automation_setup
 import public_setup
 import customer_accounts
 import plan_limits
+from storage_health import classify_storage_error
 
 load_dotenv()
 app = Flask(__name__)
@@ -145,7 +146,7 @@ def ensure_database_ready():
         return
     if not _BOOTSTRAP_LOCK.acquire(timeout=2):
         raise customer_accounts.AuthStorageUnavailable(
-            'Account access is temporarily unavailable. Please try again in a moment.')
+            'Account access is temporarily unavailable. Please try again in a moment.', retryable=True)
     try:
         if key in _INITIALIZED_DATABASES:
             return
@@ -767,12 +768,16 @@ def protect():
 
 
 @app.errorhandler(customer_accounts.AuthStorageUnavailable)
-@app.errorhandler(sqlite3.OperationalError)
+@app.errorhandler(sqlite3.DatabaseError)
 def storage_unavailable(exc):
-    """Recover from storage contention without leaking database details."""
+    """Distinguish retryable contention from faults that need operator repair."""
     g.storage_unavailable=True
-    app.logger.error('Account or workspace storage unavailable',exc_info=(type(exc),exc,exc.__traceback__))
-    message='The service is busy right now. Please wait a moment and try again. If you already created an account, sign in with the same email.'
+    failure=classify_storage_error(exc, default_retryable=getattr(exc, 'retryable', False))
+    reference=secrets.token_hex(4)
+    app.logger.error('Account or workspace unavailable code=%s reference=%s endpoint=%s',
+                     failure.code, reference, request.endpoint,
+                     exc_info=(type(exc),exc,exc.__traceback__))
+    message=failure.message
     if request.endpoint=='account':
         mode=request.form.get('mode',request.args.get('mode','login'))
         if mode not in ('register','login'):
@@ -784,14 +789,21 @@ def storage_unavailable(exc):
             session['csrf']=secrets.token_urlsafe(32)
         response=Response(render_template('account.html',mode=mode,error=message,
             email=request.form.get('email','')[:254],name=request.form.get('name','')[:80],
-            next_value=next_value,csrf=session['csrf']),status=503,mimetype='text/html')
+            next_value=next_value,csrf=session['csrf'],support_code=failure.code,
+            support_reference=reference),status=failure.status,mimetype='text/html')
     elif (request.path.startswith(('/api/','/clips/jobs','/clips/brand','/clips/publishing','/studio/draft'))
           or request.accept_mimetypes.best=='application/json'):
-        response=jsonify(error=message)
-        response.status_code=503
+        response=jsonify(error=message, error_code=failure.code, reference=reference,
+                         retryable=failure.retryable)
+        response.status_code=failure.status
     else:
-        response=Response(render_template('service_unavailable.html',message=message),status=503,mimetype='text/html')
-    response.headers['Retry-After']='2'
+        response=Response(render_template('service_unavailable.html',message=message,
+            support_code=failure.code,support_reference=reference),
+            status=failure.status,mimetype='text/html')
+    if failure.retryable:
+        response.headers['Retry-After']='2'
+    response.headers['X-AutoPoster-Error']=failure.code
+    response.headers['X-Request-ID']=reference
     response.headers['Cache-Control']='no-store'
     return response
 

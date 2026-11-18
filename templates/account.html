@@ -11,6 +11,7 @@
 {% if mode=='register' %}<p>Choose your own email and password. Use the same account whenever you return; Clip Studio does not need another login.</p>{% else %}<p>Use the email and password you chose when you created your account.</p>{% endif %}
 {% if next_value=='clips' and mode=='register' %}<p class="note">Confirm your email before uploading a video. Your clips stay in your private workspace.</p>{% endif %}
 {% if error %}<p class="error" role="alert">{{error}}</p>{% endif %}
+{% if support_code %}<p class="note">Support code: {{support_code}} · {{support_reference}}</p>{% endif %}
 <form id="account-form" method="post" action="/account" data-account-mode="{{mode}}">
 <input type="hidden" name="_csrf" value="{{csrf}}"><input type="hidden" name="mode" value="{{mode}}"><input type="hidden" name="next" value="{{next_value}}">
 {% if mode=='register' %}<label for="name">Your name</label><input id="name" name="name" autocomplete="name" maxlength="80" required value="{{name}}">{% endif %}
