@@ -8,6 +8,7 @@ import sqlite3
 import time
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlite_concurrency import ClosingConnection
 
 
 class AuthStorageUnavailable(RuntimeError):
@@ -54,7 +55,8 @@ def _public_user(row):
 
 def connect():
     # Do not leave an account form spinning for the old 15-second write wait.
-    c = sqlite3.connect(os.getenv('AUTOPOST_WEB_DB', 'autopost_web.db'), timeout=2)
+    c = sqlite3.connect(os.getenv('AUTOPOST_WEB_DB', 'autopost_web.db'), timeout=2,
+                       factory=ClosingConnection)
     c.row_factory = sqlite3.Row
     return c
 

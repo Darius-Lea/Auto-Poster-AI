@@ -6,6 +6,7 @@ on:
     paths:
       - "app_mvp.py"
       - "sqlite_runtime.py"
+      - "sqlite_concurrency.py"
       - "storage_health.py"
       - "pwa.py"
       - "clip_studio_web.py"
@@ -42,6 +43,7 @@ on:
     paths:
       - "app_mvp.py"
       - "sqlite_runtime.py"
+      - "sqlite_concurrency.py"
       - "storage_health.py"
       - "pwa.py"
       - "clip_studio_web.py"

@@ -45,7 +45,7 @@ class DashboardStorageLatencyTests(unittest.TestCase):
                     finally:
                         connection.close()
 
-    def test_real_lock_after_login_returns_promptly_and_keeps_account_signed_in(self):
+    def test_real_writer_after_login_does_not_block_wal_dashboard_reads(self):
         import customer_accounts, meta_accounts
         password = 'synthetic-dashboard-password123'
         user = customer_accounts.register('dashboard@example.test', password, 'Dashboard')
@@ -69,8 +69,8 @@ class DashboardStorageLatencyTests(unittest.TestCase):
                     'password':password,
                 }, follow_redirects=True)
                 elapsed = time.monotonic() - started
-            self.assertEqual(response.status_code, 503)
-            self.assertEqual(response.headers['X-AutoPoster-Error'], 'storage_busy')
+            self.assertEqual(response.status_code, 200)
+            self.assertNotIn('X-AutoPoster-Error', response.headers)
             self.assertLess(elapsed, 3.5)
             with client.session_transaction() as session:
                 self.assertEqual(session['account_id'], user['id'])

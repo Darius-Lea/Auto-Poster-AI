@@ -31,6 +31,15 @@ scaling needs a shared database, object store and external job workers first.
 Free ephemeral/sleeping hosting cannot guarantee persistent accounts or ongoing
 scheduled work. Keep backups, monitor free disk, and verify restart recovery.
 
+Customer-app startup enables SQLite WAL on the existing database so readers do
+not block account writes. Keep the database and its `-wal` and `-shm` sidecars
+on the same persistent local filesystem. Use SQLite's backup API for a live
+backup; copying only the database file can omit committed WAL data. Account and
+dashboard connections close after each transaction. An active competing writer
+can still produce `storage_busy`; use the displayed reference to find its
+exception in Render logs. Do not delete the database or its sidecars to clear
+a lock.
+
 The retained paths are:
 
 | Data | Setting/path |

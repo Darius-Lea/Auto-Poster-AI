@@ -14,6 +14,7 @@ import time
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from sqlite_runtime import busy_timeout_ms
+from sqlite_concurrency import ClosingConnection
 
 PLATFORMS = {
     "facebook": "Facebook Page",
@@ -33,7 +34,8 @@ HEX_ID = re.compile(r"^[a-f0-9]{32}$")
 
 def connect():
     wait_ms = busy_timeout_ms()
-    db = sqlite3.connect(os.getenv("AUTOPOST_WEB_DB", "autopost_web.db"), timeout=wait_ms / 1000)
+    db = sqlite3.connect(os.getenv("AUTOPOST_WEB_DB", "autopost_web.db"), timeout=wait_ms / 1000,
+                        factory=ClosingConnection)
     db.row_factory = sqlite3.Row
     db.execute(f"PRAGMA busy_timeout={wait_ms}")
     return db

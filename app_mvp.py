@@ -29,6 +29,7 @@ import public_setup
 import customer_accounts
 import plan_limits
 from storage_health import classify_storage_error
+from sqlite_concurrency import ClosingConnection, prepare_wal
 
 load_dotenv()
 app = Flask(__name__)
@@ -59,12 +60,14 @@ def preview_mode() -> bool:
 
 
 def db():
-    connection = sqlite3.connect(DATABASE, timeout=2)
+    connection = sqlite3.connect(DATABASE, timeout=2, factory=ClosingConnection)
     connection.row_factory = sqlite3.Row
     return connection
 
 
 def init_db():
+    # Prepare concurrency before migrations or schedulers open the database.
+    prepare_wal(DATABASE)
     with db() as c:
         c.execute("""CREATE TABLE IF NOT EXISTS app_posts(
           id INTEGER PRIMARY KEY AUTOINCREMENT,
