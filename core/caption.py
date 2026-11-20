@@ -23,13 +23,20 @@ BOOKING_TAGS = "#FortWayne #AllenCounty"
 
 
 def _booking_local_context(text: str) -> str:
-    return f"{BOOKING_AREA}\n\n{text}\n\n{BOOKING_FOLLOW}\n\n{BOOKING_TAGS}"
+    # Hook first: name, age, booking date, and charges. The follow line,
+    # the city list, and the hashtags go last, never up top.
+    return f"{text}\n\n{BOOKING_FOLLOW}\n\n{BOOKING_AREA}\n\n{BOOKING_TAGS}"
 MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 SYSTEM_PROMPT = (
     "You are a neutral public-records reporter for {city_name}. "
-    "Write a 2\u20133 sentence factual news brief. Include the person\u2019s name, "
-    "age if available, the charge, and the booking date. Do not include jokes, "
+    "Write a 2\u20133 sentence factual news brief. The FIRST line is the hook: "
+    "the person's name, age if available, booking date, and charge, for "
+    "example 'Allen Harvey, 20, booked Nov 11, 2026 - unlawful carrying of "
+    "a handgun with a prior conviction within 15 years, theft of a firearm, "
+    "parole revocation.' Keep it short and human. Do not lead with a city "
+    "list or an Allen County booking update, and never put the cities up "
+    "top. Do not include jokes, "
     "opinion, speculation, commentary, source labels, citations, or URLs. "
     "Do not say where the information came from. End with: "
     "\u2018" + DISCLAIMER + "\u2019"
@@ -45,27 +52,33 @@ def _fallback(record: Record) -> str:
             f"The listing covers Allen County, including Fort Wayne, New Haven, Huntertown, Leo-Cedarville, Grabill, and Woodburn. "
             f"Please send tips to law enforcement; do not approach. Listing status can change. {DISCLAIMER}\n\n"
             "Follow this Page for Allen County wanted-list updates.\n\n"
-            "#FortWayne #FortWayneIndiana #AllenCounty #Indiana #MostWanted"
+            "#FortWayne #AllenCounty"
         )
-    text = (f"{record.name}{age} was listed in public records for {record.charge} "
-            f"(date: {record.booking_date or 'not stated'}). {DISCLAIMER}")
+    # Hook first: name, age, booking date, then charges.
+    # Example: "Allen Harvey, 20, booked Nov 11, 2026 - unlawful carrying
+    # of a handgun with a prior conviction within 15 years, theft of a
+    # firearm, parole revocation."
+    hook = record.name
+    if record.age:
+        hook += f", {record.age}"
+    if record.booking_date:
+        hook += f", booked {record.booking_date}"
+    text = f"{hook} - {record.charge}. {DISCLAIMER}"
     return _booking_local_context(text)
 
 
 def _case_caption(record: Record) -> str:
     kind = record.charge.casefold()
-    tags = ["#FortWayne", "#FortWayneIndiana", "#AllenCounty", "#Indiana"]
+    # Only the two Page hashtags, at the very end. No extra hashtags.
+    tags = ["#FortWayne", "#AllenCounty"]
     if "missing" in kind:
         notice = "missing-person case"
-        tags.append("#MissingPerson")
         action = "If you have information, use the case page's tip instructions to reach investigators."
     elif "fugitive" in kind:
         notice = "fugitive case"
-        tags.append("#MostWanted")
         action = "Do not approach or contact the person. Send information only through the case page's tip instructions."
     else:
         notice = "unsolved case"
-        tags.append("#UnsolvedCase")
         action = "If you have firsthand information, use the case page's tip instructions to reach investigators."
     caption = (
         f"COLD CASE OF THE DAY — FORT WAYNE, ALLEN COUNTY, INDIANA\n\n"
@@ -107,6 +120,12 @@ def make_caption(record: Record, city_name: str) -> str:
         text = "\n".join(
             line for line in text.splitlines()
             if not line.strip().casefold().startswith(("source:", "source -", "source—"))
+        ).strip()
+        # Never let a city list lead the caption: drop a leading
+        # "Allen County booking update" line if Gemini put one up top.
+        text = "\n".join(
+            line for line in text.splitlines()
+            if not line.strip().casefold().startswith("allen county booking update")
         ).strip()
         if DISCLAIMER not in text:
             text = f"{text} {DISCLAIMER}"

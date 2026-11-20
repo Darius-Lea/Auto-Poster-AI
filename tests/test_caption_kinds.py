@@ -17,8 +17,10 @@ class CaptionKindTests(unittest.TestCase):
         self.assertIn('Listing status can change', text)
         self.assertIn(DISCLAIMER, text)
         self.assertIn('MOST WANTED FUGITIVE OF THE DAY', text)
-        self.assertIn('#MostWanted', text)
-        self.assertTrue(text.endswith('#FortWayne #FortWayneIndiana #AllenCounty #Indiana #MostWanted'))
+        # Only the two Page hashtags, at the very end. No extra hashtags.
+        self.assertNotIn('#MostWanted', text)
+        self.assertNotIn('#FortWayneIndiana', text)
+        self.assertTrue(text.endswith('#FortWayne #AllenCounty'))
         self.assertNotIn('was booked', text)
         self.assertNotIn('convicted', text)
 
@@ -30,3 +32,25 @@ class CaptionKindTests(unittest.TestCase):
         self.assertEqual(record.kind, 'booking')
         self.assertIn('01/01/2000', text)
         self.assertNotIn('as wanted', text)
+
+    def test_booking_fallback_hook_is_name_first_cities_last_two_tags_only(self):
+        record = Record('Allen Harvey',
+                        'unlawful carrying of a handgun with a prior conviction '
+                        'within 15 years, theft of a firearm, parole revocation',
+                        'Nov 11, 2026', 'https://source.example/booking/123',
+                        'https://source.example/photo', age=20)
+        with patch.dict('os.environ', {'GEMINI_API_KEY': ''}):
+            text = make_caption(record, 'Fort Wayne')
+        # Hook first: name, age, booking date, charges.
+        self.assertTrue(text.startswith(
+            'Allen Harvey, 20, booked Nov 11, 2026 - unlawful carrying of a handgun'))
+        self.assertIn(DISCLAIMER, text)
+        # Cities last, after the follow line; never up top.
+        self.assertLess(text.index('Follow this Page'),
+                        text.index('Allen County booking update for Fort Wayne'))
+        self.assertLess(text.index('Allen County booking update for Fort Wayne'),
+                        text.index('#FortWayne #AllenCounty'))
+        # Only the two Page hashtags, at the very end. No extra hashtags.
+        self.assertTrue(text.endswith('#FortWayne #AllenCounty'))
+        self.assertNotIn('#FortWayneIndiana', text)
+        self.assertNotIn('#Indiana', text)

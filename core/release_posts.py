@@ -3,8 +3,10 @@
 The custody monitor confirms a departure (two complete roster observations
 with the person missing) and edits the original booking post. This module
 adds the public announcement the Page owner asked for: one new Page post
-per confirmed departure, with the person's photo and booking charges when
-they are on file, or a text post when no photo is available.
+per confirmed departure, always with the person's photo and booking
+charges. A RELEASED post is never text-only: if no booking mugshot is on
+file, the departure is skipped and left for a later run instead of being
+posted without a face.
 
 A SQLite ledger gives every departure exactly one release post. Ambiguous
 Facebook outcomes are held as uncertain and never retried automatically,
@@ -110,7 +112,13 @@ def _candidates(conn: sqlite3.Connection, destination: str,
 
 
 def _enrich(conn: sqlite3.Connection, candidate: dict, destination: str) -> dict:
-    """Fill photo, charge, and booking date from the person's group post."""
+    """Fill photo, charge, and booking date from the person's group post.
+
+    The booking mugshot already saved is reused in this order: the image URL
+    stored on the custody row, then the image URL stored on the person's
+    published booking-group post. If neither has a photo, the caller skips
+    the release post instead of posting it text-only.
+    """
     person = {
         "name": candidate["name"], "image_url": candidate["image_url"],
         "charge": candidate["charge"], "booking_date": "",
@@ -166,22 +174,39 @@ def retry_failed(conn: sqlite3.Connection, record_hash: str, destination: str) -
 
 
 def _publish_one(client, city: dict, candidate: dict, person: dict, caption: str) -> str:
+    """Publish one RELEASED post, always with the booking mugshot.
+
+    Never falls back to a text-only post. If the saved mugshot cannot be
+    downloaded or stamped, raise so the departure is marked failed and can
+    be explicitly retried, instead of going out with no face.
+    """
     image_url = person.get("image_url") or ""
-    if image_url:
-        downloaded = download_image(image_url, referer=candidate["source_url"])
-        if downloaded:
-            try:
-                out = os.path.join(tempfile.gettempdir(),
-                                   f"release_{candidate['record_hash'][:12]}.jpg")
-                stamped = watermark.stamp(downloaded, city["logo"], out)
-                if stamped:
-                    return client.publish_photo(stamped, caption)
-            finally:
-                try:
-                    os.unlink(downloaded)
-                except FileNotFoundError:
-                    pass
-    return client.publish_message(caption)
+    if not image_url:
+        raise FacebookError(
+            "No booking mugshot on file for this release post; "
+            "a RELEASED post is never published text-only."
+        )
+    downloaded = download_image(image_url, referer=candidate["source_url"])
+    if not downloaded:
+        raise FacebookError(
+            "Could not download the saved booking mugshot for this release "
+            "post; a RELEASED post is never published text-only."
+        )
+    try:
+        out = os.path.join(tempfile.gettempdir(),
+                           f"release_{candidate['record_hash'][:12]}.jpg")
+        stamped = watermark.stamp(downloaded, city["logo"], out)
+        if not stamped:
+            raise FacebookError(
+                "Could not prepare the saved booking mugshot for this release "
+                "post; a RELEASED post is never published text-only."
+            )
+        return client.publish_photo(stamped, caption)
+    finally:
+        try:
+            os.unlink(downloaded)
+        except FileNotFoundError:
+            pass
 
 
 def publish_pending(conn: sqlite3.Connection, client, city: dict, destination: str, *,
@@ -192,18 +217,29 @@ def publish_pending(conn: sqlite3.Connection, client, city: dict, destination: s
 
     Preview counts the announcements that would be made without reserving
     ledger rows or calling Facebook. A departure whose announcement outcome
-    is uncertain is reported and never retried automatically.
+    is uncertain is reported and never retried automatically. A departure
+    with no booking mugshot on file is skipped, not planned and not
+    reserved, so a later run can still post it with a face if a photo
+    turns up inside the lookback window; it is never posted text-only.
     """
     current = now or datetime.now(timezone.utc)
     if current.utcoffset() is None:
         raise ValueError("The release check time must be timezone-aware")
     initialize(conn)
     grouped.initialize(conn)
-    report = {"published": 0, "planned": 0, "errors": []}
+    report = {"published": 0, "planned": 0, "skipped_no_photo": 0, "errors": []}
     for candidate in _candidates(conn, destination, current, lookback_hours):
         person = _enrich(conn, candidate, destination)
         checked = datetime.fromisoformat(candidate["status_changed_at"])
         caption = render_release_caption(person, checked)
+        if not person.get("image_url"):
+            log.warning(
+                "Skipping RELEASED post for %s: no booking mugshot on file; "
+                "a RELEASED post is never published text-only.",
+                person["name"],
+            )
+            report["skipped_no_photo"] += 1
+            continue
         if dry_run:
             report["planned"] += 1
             continue

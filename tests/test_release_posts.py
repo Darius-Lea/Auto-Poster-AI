@@ -86,16 +86,33 @@ class ReleasePostTests(unittest.TestCase):
         self.assertEqual(again["published"], 0)
         self.client.publish_photo.assert_called_once()
 
-    def test_text_post_when_no_photo_on_file(self):
+    def test_no_photo_release_post_is_skipped_not_posted_text_only(self):
         self.track()
         changed = self.confirm_departure()
         report = self.publish(changed + timedelta(hours=1))
-        self.assertEqual(report["published"], 1)
-        self.client.publish_message.assert_called_once()
+        # No mugshot on file: nothing is published, nothing is reserved,
+        # so a later run can still post it with a face.
+        self.assertEqual(report["published"], 0)
+        self.assertEqual(report["skipped_no_photo"], 1)
+        self.client.publish_message.assert_not_called()
         self.client.publish_photo.assert_not_called()
-        caption = self.client.publish_message.call_args.args[0]
-        self.assertIn("Fixture Person", caption)
-        self.assertNotIn("Charges at booking", caption)
+        count = self.conn.execute("SELECT COUNT(*) FROM release_posts").fetchone()[0]
+        self.assertEqual(count, 0)
+        # A photo turning up later (from the saved booking-group post)
+        # lets the same departure publish with its mugshot.
+        member = {"hash": self.person, "name": "Fixture Person",
+                  "booking_date": "01/01/2000",
+                  "source_url": "https://source.example/detail/0",
+                  "image_url": "https://source.example/photo/0.jpg",
+                  "charge": "Grouped charge", "caption": "Original booking caption"}
+        grouped.create(self.conn, "group-1", self.destination, self.source,
+                       [member], grouped.render_caption([member]))
+        grouped.mark_published(self.conn, "group-1", self.destination, "123_789", ["456"])
+        report = self.publish(changed + timedelta(hours=2))
+        self.assertEqual(report["published"], 1)
+        self.assertEqual(report["skipped_no_photo"], 0)
+        self.client.publish_photo.assert_called_once()
+        self.client.publish_message.assert_not_called()
 
     def test_group_member_supplies_photo_charge_and_booking_date(self):
         self.track()
