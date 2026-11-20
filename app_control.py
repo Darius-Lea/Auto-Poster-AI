@@ -11,6 +11,7 @@ import secrets
 import sqlite3
 import time
 from urllib.parse import urlparse
+from sqlite_runtime import busy_timeout_ms
 
 DATABASE = lambda: os.getenv("AUTOPOST_WEB_DB", "autopost_web.db")
 WORKSPACE = "owner"
@@ -43,9 +44,10 @@ DEFAULTS = {
 
 
 def connect():
-    conn = sqlite3.connect(DATABASE(), timeout=15, isolation_level=None)
+    wait_ms = busy_timeout_ms()
+    conn = sqlite3.connect(DATABASE(), timeout=wait_ms / 1000, isolation_level=None)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA busy_timeout=15000")
+    conn.execute(f"PRAGMA busy_timeout={wait_ms}")
     return conn
 
 

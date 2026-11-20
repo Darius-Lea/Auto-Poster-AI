@@ -15,6 +15,7 @@ import secrets
 import sqlite3
 import time
 from urllib.parse import urlencode
+from sqlite_runtime import busy_timeout_ms
 
 import requests
 from cryptography.fernet import Fernet
@@ -27,9 +28,10 @@ PENDING_SECONDS = 600
 
 
 def _db():
-    c = sqlite3.connect(os.getenv("AUTOPOST_WEB_DB", "autopost_web.db"), timeout=15)
+    wait_ms = busy_timeout_ms()
+    c = sqlite3.connect(os.getenv("AUTOPOST_WEB_DB", "autopost_web.db"), timeout=wait_ms / 1000)
     c.row_factory = sqlite3.Row
-    c.execute("PRAGMA busy_timeout=15000")
+    c.execute(f"PRAGMA busy_timeout={wait_ms}")
     return c
 
 

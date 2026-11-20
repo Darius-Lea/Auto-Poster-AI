@@ -5,6 +5,8 @@ on:
     branches: [feature/saas-appstore-foundation-2026-11]
     paths:
       - "app_mvp.py"
+      - "sqlite_runtime.py"
+      - "storage_health.py"
       - "pwa.py"
       - "clip_studio_web.py"
       - "clip_branding.py"
@@ -39,6 +41,8 @@ on:
   pull_request:
     paths:
       - "app_mvp.py"
+      - "sqlite_runtime.py"
+      - "storage_health.py"
       - "pwa.py"
       - "clip_studio_web.py"
       - "clip_branding.py"
@@ -118,6 +122,7 @@ jobs:
           python scripts/qa/install_clip_smoke.py
           python scripts/qa/clip_workflow_smoke.py
           python scripts/qa/account_access_smoke.py
+          python scripts/qa/account_first_paint_smoke.py
           python scripts/qa/sidebar_smoke.py
           python scripts/qa/clip_paste_smoke.py
       - name: Save browser screenshots

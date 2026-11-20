@@ -204,7 +204,10 @@ def shared_tools_navigation(response):
     if 'id="ap-tool-sidebar-script"' in html:
         return response
     signed_in='true' if session.get('authorized') is True else 'false'
-    assets=('<link rel="stylesheet" href="/static/tool-sidebar.css">'
+    # Optional tools styling must not hold up the page or its deferred scripts
+    # when a mobile connection leaves this separate asset request waiting.
+    assets=('<link rel="stylesheet" href="/static/tool-sidebar.css" media="print" onload="this.media=\'all\'">'
+            '<noscript><link rel="stylesheet" href="/static/tool-sidebar.css"></noscript>'
             '<script id="ap-tool-sidebar-script" src="/static/tool-sidebar.js" defer '
             'data-signed-in="'+signed_in+'"></script>')
     marker=html.lower().rfind('</body>')
