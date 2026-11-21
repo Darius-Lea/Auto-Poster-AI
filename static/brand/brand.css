@@ -1,0 +1,8 @@
+/* Signal Fold: original Auto Poster AI application identity. */
+:root{--brand-navy:#0b1424;--brand-lime:#c8f68a;--brand-sky:#89d8f5}
+.brand-icon{display:inline-block;flex-shrink:0;object-fit:contain;vertical-align:middle;max-width:none}
+.logo>.brand-icon{margin-right:8px}
+.brand-login-logo{display:flex;align-items:center;gap:10px;line-height:1.2}
+.brand-login-logo .brand-icon{width:48px;height:48px}
+.brand-empty-art{display:block;width:150px;height:auto;margin:0 auto 14px}
+@media(max-width:400px){.brand-icon{max-width:36px}.brand-login-logo .brand-icon{max-width:48px}}

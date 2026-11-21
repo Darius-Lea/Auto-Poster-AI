@@ -1,0 +1,33 @@
+{
+  "name": "auto-poster-ai-desktop",
+  "productName": "Auto Poster AI",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Auto Poster AI Windows desktop client",
+  "author": "Auto Poster AI",
+  "license": "UNLICENSED",
+  "main": "main.cjs",
+  "engines": { "node": ">=24 <25" },
+  "scripts": {
+    "configure": "node scripts/configure.cjs",
+    "start": "npm run configure && electron .",
+    "test": "node --test test/*.test.cjs",
+    "dist": "npm run configure && electron-builder --win nsis --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "45.3.2",
+    "electron-builder": "26.18.0"
+  },
+  "overrides": {
+    "minimatch@>=7.0.0 <11.0.1": "11.0.1"
+  },
+  "build": {
+    "appId": "com.autoposterai.desktop",
+    "asar": true,
+    "directories": { "output": "dist" },
+    "files": [ "main.cjs", "navigation.cjs", "app-config.json", "assets/icon.ico", "package.json" ],
+    "win": { "target": [{ "target": "nsis", "arch": ["x64"] }], "icon": "assets/icon.ico", "artifactName": "Auto-Poster-AI-${version}-${arch}-setup.${ext}" },
+    "nsis": { "oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "createStartMenuShortcut": true },
+    "publish": null
+  }
+}

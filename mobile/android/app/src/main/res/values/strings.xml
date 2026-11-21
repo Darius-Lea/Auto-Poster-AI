@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Auto Poster AI</string>
+    <string name="title_activity_main">Auto Poster AI</string>
+    <string name="package_name">io.autoposterai.app</string>
+    <string name="custom_url_scheme">io.autoposterai.app</string>
+</resources>

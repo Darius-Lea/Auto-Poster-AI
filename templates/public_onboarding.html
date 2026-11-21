@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1220">
+<meta name="description" content="Choose your channels, create a post and review your posting plan with Auto Poster AI.">
+<title>Set up your posting · Auto Poster AI</title>
+<style>
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:dark;--bg:#0b1220;--bg2:#122037;--card:#17273a;--line:#31485e;--ink:#f4f8fb;--muted:#b7c7d5;--green:#c8f68a;--sky:#8bd6fa}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 85% -5%,#164e6555,transparent 40%),var(--bg);color:var(--ink);line-height:1.55}
+button,input,select,textarea{font:inherit}button{cursor:pointer}a{color:var(--green);text-decoration:none}a:hover{text-decoration:underline}
+.wrap{max-width:1060px;margin:auto;padding:24px 22px 100px}
+header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:7px 0 27px;border-bottom:1px solid #ffffff15}
+.brand{display:flex;align-items:center;gap:10px;font-weight:850;font-size:18px;letter-spacing:-.4px;color:var(--ink)}.brand:hover{text-decoration:none}
+.brand-mark{display:grid;place-items:center;width:41px;height:41px;background:#29445e;border-radius:13px;color:var(--green)}
+.linksub{font-size:13px;color:#c3d2df}
+.heading{padding:46px 0 23px;max-width:760px}
+.eyebrow{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--green);font-weight:850}
+h1{font-size:clamp(35px,5vw,57px);letter-spacing:-2.5px;line-height:1.1;margin:11px 0 16px}
+h1 span{color:var(--green)}h2{font-size:clamp(24px,3.5vw,32px);letter-spacing:-.9px;line-height:1.2;margin:0 0 12px}
+h3{font-size:18px;letter-spacing:-.5px;margin:0 0 8px}p{font-size:14px;color:var(--muted);margin:0 0 17px;line-height:1.65}
+.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-bottom:27px}
+.step{display:flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:12px;background:#18293c;padding:12px 13px;color:#b5c5d1;font-size:12px;font-weight:750}
+.step span{display:grid;place-items:center;border:1px solid #586c7a;width:27px;height:27px;flex-shrink:0;border-radius:50%;font-size:12px}.step.active{border-color:var(--green);background:#24382d;color:#eafbd5}.step.active span,.step.done span{background:var(--green);border-color:var(--green);color:#172514}.step.done{color:#d6e9dd}
+.grid{display:grid;grid-template-columns:minmax(0,1.56fr) minmax(260px,.82fr);gap:21px;align-items:start}
+.card{background:linear-gradient(155deg,#1b2c40,#121f32);border:1px solid #344d64;border-radius:21px;padding:clamp(21px,3vw,32px);box-shadow:0 18px 55px #040c1a45}
+.panel[hidden]{display:none}.minor{font-size:12px;color:#93a9bc;margin-bottom:19px}
+.platform-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:22px 0}
+.platform{display:flex;gap:13px;align-items:center;padding:17px 14px;border:1px solid #3d556b;border-radius:15px;background:#162638;cursor:pointer;transition:border-color .15s,background .15s;min-width:0}
+.platform:has(input:checked){background:#244036;border-color:#a7dc7e}
+.platform:hover{border-color:#7da1b7}
+.platform input{width:20px;height:20px;accent-color:var(--green);flex-shrink:0}
+.platform-symbol{width:39px;height:39px;border:1px solid #537084;background:#22394e;border-radius:12px;display:grid;place-items:center;color:#d6e9fb;font-size:12px;font-weight:900;letter-spacing:-.7px;flex-shrink:0}
+.platform-content{min-width:0}.platform-content b{display:block;font-size:14px}.platform-content small{display:block;color:#a9bac9;font-size:11px}
+label.field{display:block;font-size:13px;font-weight:750;margin:20px 0 8px}
+textarea,select,input[type=text],input[type=datetime-local]{width:100%;border:1px solid #4e6478;background:#0b192b;color:var(--ink);border-radius:11px;padding:14px;min-height:47px;outline-offset:2px;font-size:15px}
+textarea{min-height:145px;resize:vertical}
+.field-note{font-size:12px;color:#9cb1c4;margin:6px 0 12px}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.actions{display:flex;gap:11px;flex-wrap:wrap;margin-top:27px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid transparent;background:var(--green);color:#172b17;border-radius:12px;padding:13px 20px;font-size:14px;min-height:48px;font-weight:850;white-space:nowrap}
+.btn:hover{background:#dcffa9}.btn.secondary{background:#273d51;border-color:#466077;color:#e9f2fc}.btn.secondary:hover{background:#365167}.btn:disabled{opacity:.5;cursor:not-allowed}
+.alert{display:flex;gap:12px;padding:15px;background:#263a40;border:1px solid #5b7a74;border-radius:14px;margin:18px 0;color:#d6ebed;font-size:12px;line-height:1.6}
+.alert .icon{color:var(--green);margin-top:2px}.alert strong{display:block;font-size:13px}
+.sidebar{display:grid;gap:16px}
+.side-card{padding:23px;border:1px solid #36506a;background:#122238;border-radius:19px}
+.side-card h3{display:flex;gap:9px;align-items:center;font-size:16px}
+.side-card p{font-size:12px;margin:8px 0}.side-card ul{padding-left:18px;font-size:12px;color:#bbccda;line-height:1.85}
+.preview-line{padding:11px 0;border-bottom:1px solid #344b62;font-size:13px;overflow-wrap:anywhere}.preview-line:last-child{border:0}
+.preview-line small{color:#9fb4c5;font-size:11px;display:block;margin-bottom:3px}.preview-line b{font-weight:650;color:#e7f3fb;white-space:pre-wrap}
+.note{border-radius:11px;border:1px solid #57653f;background:#313a2c;padding:13px;margin:17px 0 0;color:#e1edcb;font-size:12px}
+.review{display:grid;gap:10px;margin-top:20px}
+.review-item{padding:16px;border:1px solid #3f5668;border-radius:13px;background:#15273a}
+.review-item small{display:block;color:#9cb4c8;font-size:11px;text-transform:uppercase;letter-spacing:.8px;font-weight:700;margin-bottom:8px}
+.review-item .value{font-size:15px;white-space:pre-wrap;overflow-wrap:anywhere}
+.finish-actions{display:grid;gap:11px;margin-top:24px}
+.complete{display:flex;gap:12px;align-items:center;background:#234236;border:1px solid #69976a;border-radius:15px;padding:17px;color:#d9f9d5}
+.complete strong{display:block;font-size:15px}.complete small{display:block;color:#b5d8b6;font-size:12px}
+.mobile-only{display:none}.caption{font-size:11px;color:#9dafbd;margin-top:13px}
+@media(max-width:850px){.grid{grid-template-columns:1fr}.sidebar{grid-template-columns:repeat(2,minmax(0,1fr))}.heading{padding-top:36px}}
+@media(max-width:600px){.wrap{padding:14px 15px 70px}.heading{padding:31px 0 20px}h1{letter-spacing:-1.8px}.steps{gap:5px}.step{padding:10px 3px;justify-content:center;flex-direction:column;text-align:center;font-size:10px}.step span{width:24px;height:24px}.platform-grid,.split{grid-template-columns:1fr}.sidebar{grid-template-columns:1fr}.card{padding:20px}.actions{display:grid;grid-template-columns:1fr}.actions .btn{width:100%}.linksub{font-size:11px}.brand{font-size:15px}}
+@media(prefers-reduced-motion:reduce){.platform{transition:none}}
+</style>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png" sizes="180x180">
+<link rel="stylesheet" href="/static/brand/brand.css">
+</head>
+<body>
+{% include "_icons.html" %}
+<div class="wrap">
+<header>
+ <a class="brand" href="/welcome" aria-label="Auto Poster AI homepage"><img class="brand-icon" src="/static/brand/mark.svg" width="40" height="40" alt="">Auto Poster AI</a>
+ <a class="linksub" href="/welcome">Back to website</a>
+</header>
+<section class="heading">
+ <div class="eyebrow">FREE SETUP · NO ACCOUNT REQUIRED TO START</div>
+ <h1>Your next post. <span>Planned your way.</span></h1>
+ <p>Choose your channels, create a post, and decide when it should appear. Review everything before you save.</p>
+ <p><a class="btn secondary" href="/launch">Only have a business idea? Build my first plan</a></p>
+</section>
+<nav class="steps" id="step-nav" aria-label="Setup progress">
+ <div class="step active" data-progress="1"><span>1</span>Platforms</div>
+ <div class="step" data-progress="2"><span>2</span>Content</div>
+ <div class="step" data-progress="3"><span>3</span>Schedule</div>
+ <div class="step" data-progress="4"><span>4</span>Review</div>
+</nav>
+<div class="grid">
+<main class="card" aria-label="Free setup">
+<form id="wizard" novalidate>
+ <section class="panel" data-step="1">
+  <div class="eyebrow">STEP 01 / 04</div>
+  <h2>Where do you want to post?</h2>
+  <p>Facebook Page text publishing is supported after connection and activation. Other platforms below save future preferences only; they cannot publish from this app yet.</p>
+  <div class="platform-grid">
+  {% for name,description,mark,key in [
+    ('Facebook Pages','Page selection after connecting','f','facebook'),
+    ('Instagram','Publishing connector planned','IG','instagram'),
+    ('TikTok','Publishing connector planned','Tk','tiktok'),
+    ('YouTube','Video publishing planned','YT','youtube'),
+    ('LinkedIn','Professional publishing planned','in','linkedin'),
+    ('Threads','Publishing connector planned','Th','threads'),
+    ('Pinterest','Pin publishing planned','P','pinterest'),
+    ('X','Publishing connector planned','X','x')
+  ] %}
+  <label class="platform"><input type="checkbox" name="platforms" value="{{key}}"><span class="platform-symbol">{{mark}}</span><span class="platform-content"><b>{{name}}</b><small>{{description}}</small></span></label>
+  {% endfor %}
+  </div>
+  <div class="alert"><svg class="icon"><use href="#ico-plug"/></svg><span><strong>Connections happen later.</strong>Choosing a platform is only your preference. It doesn't grant access to an account or claim that posting works yet.</span></div>
+ </section>
+ <section class="panel" data-step="2" hidden>
+  <div class="eyebrow">STEP 02 / 04</div>
+  <h2>What should Auto Poster AI post?</h2>
+  <p>Write a sample post. You can edit everything before it ever goes live.</p>
+  <label class="field" for="message">Your post</label>
+  <textarea id="message" maxlength="10000" placeholder="Write your announcement, update, promotion or other content here." required></textarea>
+  <p class="field-note">Start with text. Media uploads and platform-specific formats are not connected to this free preview yet.</p>
+  <label class="field" for="topic">Describe your content or brand voice (optional)</label>
+  <textarea id="topic" maxlength="300" style="min-height:95px" placeholder="For example: Friendly updates about new arrivals, clear calls to action, factual news only after verification."></textarea>
+  <label class="field" for="source">Where will ongoing content come from?</label>
+  <select id="source">
+   <option value="own_posts">Posts I create and approve</option>
+   <option value="ai_drafts">AI-generated drafts for my approval (planned)</option>
+   <option value="approved_feed">An approved website or content feed (planned)</option>
+  </select>
+  <p class="field-note">The last two choices save a future preference; they do not turn on AI or website monitoring.</p>
+ </section>
+ <section class="panel" data-step="3" hidden>
+  <div class="eyebrow">STEP 03 / 04</div>
+  <h2>When should it post?</h2>
+  <p>Build your preferred schedule. Nothing is sent automatically by saving it.</p>
+  <label class="field" for="frequency">Posting frequency</label>
+  <select id="frequency">
+   <option value="once">Just once</option>
+   <option value="daily">Once a day</option>
+   <option value="twice_daily">Twice a day — higher-plan preference</option>
+   <option value="three_daily">Three times a day — higher-plan preference</option>
+   <option value="weekly">Once a week</option>
+  </select>
+  <label class="field" for="time_type">First posting time</label>
+  <select id="time_type">
+   <option value="after_activation">Choose when I activate it</option>
+   <option value="at_time">I have a preferred date and time</option>
+  </select>
+  <div id="date-group" hidden>
+   <label class="field" for="scheduled_at">Preferred local date and time</label>
+   <input id="scheduled_at" type="datetime-local">
+   <p class="field-note">This date is a preference—not an active scheduled job.</p>
+  </div>
+  <label class="field" for="approval">How should posts be approved?</label>
+  <select id="approval">
+   <option value="approve_every_post">Let me review each post</option>
+   <option value="auto_when_supported">Allow Autopilot after I explicitly turn it on</option>
+  </select>
+  <div class="alert"><svg class="icon"><use href="#ico-shield"/></svg><span><strong>You decide when publishing starts.</strong>Saving your schedule keeps it as a plan. Supported automation starts only after you connect an account and explicitly activate it.</span></div>
+ </section>
+ <section class="panel" data-step="4" hidden>
+  <div class="eyebrow">STEP 04 / 04</div>
+  <h2>Review your setup</h2>
+  <p>Check your content, destinations and timing. You can go back and change any step.</p>
+  <div class="review" id="review-list" aria-live="polite"></div>
+  <div class="alert"><svg class="icon"><use href="#ico-lock"/></svg><span><strong>No account, payment, or external publishing yet.</strong>Your work is currently kept only in this browser on this device. It isn't stored in a customer account and may be lost if browser data is cleared.</span></div>
+  <div id="saved-success" class="complete" hidden><svg class="icon icon-lg"><use href="#ico-check"/></svg><span><strong>Setup saved on this device.</strong><small>You can edit it again before registering.</small></span></div>
+  <div class="finish-actions">
+   <button type="button" class="btn" id="complete-setup">Continue to your account <svg class="icon"><use href="#ico-arrow-right"/></svg></button>
+   <button type="button" class="btn secondary" id="save-setup"><svg class="icon"><use href="#ico-check"/></svg> Save setup on this device</button>
+   <button type="button" class="btn secondary" id="download-setup"><svg class="icon"><use href="#ico-file"/></svg> Download my setup as a backup</button>
+   <a class="btn secondary" id="owner-login" href="/account?next=setup" hidden><svg class="icon"><use href="#ico-lock"/></svg> Sign in to save this setup</a>
+  </div>
+  <p class="caption">Activating supported publishing requires authorized account connections and an active subscription. Review the plan details in Settings before you activate.</p>
+  <p class="caption">Create your account or sign in to save this setup in your own workspace. You will choose your actual connected business Pages before activation.</p>
+ </section>
+ <div class="actions" id="wizard-actions">
+  <button type="button" class="btn secondary" id="back" hidden>Back</button>
+  <button type="button" class="btn" id="next">Continue <svg class="icon"><use href="#ico-arrow-right"/></svg></button>
+ </div>
+ <p class="caption" id="error" role="alert"></p>
+</form>
+</main>
+<aside class="sidebar">
+ <div class="side-card"><h3><svg class="icon"><use href="#ico-shield"/></svg> Your next post, step by step</h3>
+  <p>Build a plan you can review and adjust at every step.</p>
+  <ul><li>Choose your destinations first</li><li>Write and preview your content</li><li>Decide on a schedule</li><li>Keep live posting off until approved</li></ul>
+ </div>
+ <div class="side-card">
+  <h3><svg class="icon"><use href="#ico-file"/></svg> Your setup so far</h3>
+  <div class="preview-line"><small>Platforms</small><b id="aside-platforms">Not chosen yet</b></div>
+  <div class="preview-line"><small>Post preview</small><b id="aside-content">Your content will appear here.</b></div>
+  <div class="preview-line"><small>Schedule</small><b id="aside-schedule">Not selected yet</b></div>
+  <div class="note"><svg class="icon icon-sm"><use href="#ico-lock"/></svg> This free preview does not publish or charge you.</div>
+  <button type="button" id="clear" class="btn secondary" style="margin-top:16px;width:100%">Clear this device's setup</button>
+ </div>
+</aside>
+</div>
+</div>
+<footer class="wrap" style="padding-top:0;padding-bottom:35px;font-size:13px" aria-label="Support links"><a href="/help">Help</a> · <a href="/account">My account</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></footer>
+<script>
+(() => {
+"use strict";
+const storageKey="autoposter_public_setup_v1";
+const forms=document.getElementById("wizard");
+const next=document.getElementById("next"),back=document.getElementById("back");
+const error=document.getElementById("error");
+const panels=[...document.querySelectorAll(".panel")];
+const nav=[...document.querySelectorAll("[data-progress]")];
+const platformLabels={facebook:"Facebook Pages",instagram:"Instagram",tiktok:"TikTok",youtube:"YouTube",linkedin:"LinkedIn",threads:"Threads",pinterest:"Pinterest",x:"X"};
+const frequencyLabels={once:"Once",daily:"Daily",twice_daily:"Twice daily",three_daily:"Three times daily",weekly:"Weekly"};
+const sourceLabels={own_posts:"My own posts",ai_drafts:"AI drafts (planned)",approved_feed:"Approved feed (planned)"};
+const approvalLabels={approve_every_post:"I approve every post",auto_when_supported:"Autopilot after I enable it"};
+let current=1;
+let setupKey;
+function createKey(){
+ const bytes=new Uint8Array(16);
+ crypto.getRandomValues(bytes);
+ return [...bytes].map(v=>v.toString(16).padStart(2,"0")).join("");
+}
+setupKey=createKey();
+const $=id=>document.getElementById(id);
+function chosen(){return [...forms.querySelectorAll('input[name="platforms"]:checked')].map(x=>x.value)}
+function formatDate(value){if(!value)return "Choose after activation";const d=new Date(value);return Number.isNaN(d.getTime())?"Invalid time":d.toLocaleString()}
+function snapshot(){
+ const type=$("time_type").value;
+ const at=$("scheduled_at").value;
+ return {
+  setup_key:setupKey,platforms:chosen(),message:$("message").value.trim(),
+  topic:$("topic").value.trim(),source:$("source").value,
+  frequency:$("frequency").value,time_type:type,
+  scheduled_at:type==="at_time"&&at?new Date(at).toISOString():"",
+  approval:$("approval").value
+ };
+}
+function persist(){
+ try{localStorage.setItem(storageKey,JSON.stringify(snapshot()));return true}
+ catch(_){return false}
+}
+function restore(){
+ try{
+ const d=JSON.parse(localStorage.getItem(storageKey)||"null");
+ if(!d||typeof d!=="object"||!Array.isArray(d.platforms))return;
+ if(typeof d.setup_key==="string"&&/^[a-f0-9]{32}$/.test(d.setup_key))setupKey=d.setup_key;
+ for(const box of forms.querySelectorAll('input[name="platforms"]'))box.checked=d.platforms.includes(box.value);
+ if(typeof d.message==="string")$("message").value=d.message.slice(0,10000);
+ if(typeof d.topic==="string")$("topic").value=d.topic.slice(0,300);
+ if(sourceLabels[d.source])$("source").value=d.source;
+ if(frequencyLabels[d.frequency])$("frequency").value=d.frequency;
+ if(["after_activation","at_time"].includes(d.time_type))$("time_type").value=d.time_type;
+ if(approvalLabels[d.approval])$("approval").value=d.approval;
+ if(d.scheduled_at&&$("time_type").value==="at_time"){
+  const date=new Date(d.scheduled_at);
+  if(!Number.isNaN(date.getTime())){
+   const pad=v=>String(v).padStart(2,"0");
+   $("scheduled_at").value=date.getFullYear()+"-"+pad(date.getMonth()+1)+"-"+pad(date.getDate())+"T"+pad(date.getHours())+":"+pad(date.getMinutes());
+  }
+ }
+ }catch(_){}
+}
+function update(){
+ const names=chosen().map(x=>platformLabels[x]);
+ $("aside-platforms").textContent=names.length?names.join(", "):"Not chosen yet";
+ $("aside-content").textContent=$("message").value.trim().slice(0,130)||"Your content will appear here.";
+ $("aside-schedule").textContent=frequencyLabels[$("frequency").value]+(" — "+($("time_type").value==="at_time"?formatDate($("scheduled_at").value):"after activation"));
+ $("date-group").hidden=$("time_type").value!=="at_time";
+ $("scheduled_at").required=$("time_type").value==="at_time";
+}
+function show(step){
+ step=Math.max(1,Math.min(4,Number(step)||1));
+ current=step;
+ panels.forEach(p=>{p.hidden=Number(p.dataset.step)!==step});
+ nav.forEach(n=>{const num=Number(n.dataset.progress);n.classList.toggle("active",num===step);n.classList.toggle("done",num<step)});
+ back.hidden=step===1;
+ next.hidden=step===4;
+ $("wizard-actions").hidden=step===4;
+ error.textContent="";
+ if(step===4)review();
+ window.scrollTo({top:0,behavior:"smooth"});
+}
+function valid(step){
+ if(step===1&&chosen().length===0){error.textContent="Choose at least one platform.";return false}
+ if(step===2&&$("message").value.trim().length<2){error.textContent="Write a post before continuing.";return false}
+ if(step===3&&$("time_type").value==="at_time"){
+  const raw=$("scheduled_at").value, d=new Date(raw);
+  if(!raw||Number.isNaN(d.getTime())||d.getTime()<=Date.now()){
+    error.textContent="Choose a valid date and time in the future.";return false
+  }
+ }
+ error.textContent="";return true;
+}
+function row(label,value){
+ const item=document.createElement("div");item.className="review-item";
+ const title=document.createElement("small");title.textContent=label;
+ const body=document.createElement("div");body.className="value";body.textContent=value;
+ item.append(title,body);return item;
+}
+function review(){
+ const root=$("review-list");root.replaceChildren();
+ root.append(
+  row("Platforms",chosen().map(x=>platformLabels[x]).join(", ")),
+  row("Post content",$("message").value.trim()),
+  row("Content source",sourceLabels[$("source").value]),
+  row("Frequency",frequencyLabels[$("frequency").value]),
+  row("First posting time",$("time_type").value==="at_time"?formatDate($("scheduled_at").value):"When I activate it"),
+  row("Review preference",approvalLabels[$("approval").value])
+ );
+}
+forms.addEventListener("input",()=>{update();persist();$("saved-success").hidden=true;$("owner-login").hidden=true});
+forms.addEventListener("change",()=>{update();persist();$("saved-success").hidden=true;$("owner-login").hidden=true});
+function completeSetup(){if(!valid(1)||!valid(2)||!valid(3))return;if(!persist()){error.textContent="This browser blocked saving. Download a backup before continuing.";return;}sessionStorage.setItem("autoposter_finish_setup","1");location.href="/account?next=setup";}
+$("complete-setup").addEventListener("click",completeSetup);
+next.addEventListener("click",()=>{if(current>=4){completeSetup();return;}if(valid(current)){persist();show(current+1)}});
+back.addEventListener("click",()=>show(current-1));
+forms.addEventListener("submit",e=>e.preventDefault());
+$("save-setup").addEventListener("click",()=>{
+ if(!valid(1)||!valid(2)||!valid(3))return;
+ if(persist()){
+  $("saved-success").hidden=false;
+  $("owner-login").hidden=false;
+  error.textContent="";
+ }else error.textContent="This browser blocked local storage. Download a backup instead.";
+});
+$("download-setup").addEventListener("click",()=>{
+ const data=snapshot(); const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+ const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="auto-poster-ai-setup.json";
+ document.body.appendChild(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+});
+$("clear").addEventListener("click",()=>{
+ if(!confirm("Clear the setup on this device?"))return;
+ try{localStorage.removeItem(storageKey)}catch(_){}
+ setupKey=createKey();
+ forms.reset();
+ $("message").value="";$("topic").value="";update();show(1);
+ $("saved-success").hidden=true;$("owner-login").hidden=true;
+});
+restore();update();show(1);
+})();
+</script>
+</body>
+</html>

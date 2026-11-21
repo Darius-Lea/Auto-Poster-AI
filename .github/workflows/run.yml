@@ -122,11 +122,20 @@ jobs:
             mkdir -p storage_state
             printf '%s' "$STORAGE_STATE_B64" | base64 -d > storage_state/combined.json
           fi
-      - name: Run selected action
+      - name: Check mobile Autopilot settings and paid access
+        id: controls
         env:
-          RUN_MODE: ${{ inputs.mode || needs.posting_window.outputs.mode }}
+          AUTOPOST_CONTROL_URL: ${{ vars.AUTOPOST_CONTROL_URL }}
+          AUTOPOST_CONTROL_TOKEN: ${{ secrets.AUTOPOST_CONTROL_TOKEN }}
+          AUTOPOST_REMOTE_REQUIRED: ${{ vars.AUTOPOST_REMOTE_REQUIRED || 'false' }}
+          AUTOPOST_REQUESTED_MODE: ${{ inputs.mode || needs.posting_window.outputs.mode }}
+        run: python control_bridge.py
+      - name: Run selected action
+        if: steps.controls.outputs.run == 'true'
+        env:
+          RUN_MODE: ${{ steps.controls.outputs.mode }}
           # Scheduled runs publish at most one record; manual runs use the chosen limit.
-          RUN_LIMIT: ${{ github.event_name == 'schedule' && '1' || inputs.limit || vars.MAX_PER_RUN || '1' }}
+          RUN_LIMIT: ${{ steps.controls.outputs.limit || inputs.limit || vars.MAX_PER_RUN || '1' }}
           SOURCE_TYPE: ${{ inputs.source_type || 'booking' }}
         run: |
           case "$RUN_MODE" in

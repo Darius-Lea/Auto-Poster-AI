@@ -1,0 +1,16 @@
+<section class="studio-card" aria-labelledby="clip-brand-title" id="clip-branding">
+<h2 id="clip-brand-title">Your business look</h2>
+<p>Save your name, color and logo once. New clips will use this look. You can keep making clips without a logo.</p>
+<form id="clip-brand-form" method="post" action="/clips/brand" enctype="multipart/form-data">
+<input type="hidden" name="_csrf" value="{{csrf}}"><input type="hidden" name="revision" value="0">
+<label for="clip-brand-name">Business or creator name</label><input id="clip-brand-name" name="name" maxlength="80" autocomplete="organization" placeholder="For example, Mary’s Garden">
+<label for="clip-brand-color">Your brand color</label><input id="clip-brand-color" name="accent" type="color" value="#a7f36a">
+<label for="clip-brand-logo">Add or change your logo, optional</label><input id="clip-brand-logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp">
+<p class="muted">PNG, JPG or WebP, up to 4 MB. Use a still image at least 16 pixels per side. Transparent PNG backgrounds are kept.</p>
+<div id="clip-brand-preview" hidden><p>Your saved logo</p><img id="clip-brand-image" alt="Your saved business logo" style="max-width:180px;max-height:130px;background:#eef2f7;border-radius:10px;padding:8px"><label><input type="checkbox" name="remove_logo" value="yes"> Remove this logo from future clips</label></div>
+<div class="actions"><button id="clip-brand-save" type="submit" disabled>Save my business look</button><button id="clip-brand-reload" type="button" class="secondary">Reload saved settings</button></div>
+<p id="clip-brand-status" role="status" aria-live="polite">Loading your saved business look…</p>
+</form>
+<p class="muted">This adds your logo to the clip’s closing card. It does not create a social media account or business Page. Already queued clips keep their original look.</p>
+</section>
+<script src="/static/clip-branding.js" defer></script>

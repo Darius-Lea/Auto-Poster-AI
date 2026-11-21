@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1424"><title>{{'Create your account' if mode=='register' else 'Sign in'}} · Auto Poster AI</title>
+<link rel="icon" href="/icon.svg"><link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png"><script src="/static/account.js" defer></script>
+<style>
+:root{font:16px system-ui;color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0b1424;color:#f3f7fc;line-height:1.6}main{max-width:470px;margin:6vh auto;padding:24px}header a{display:flex;align-items:center;gap:12px;font-weight:800;color:#f3f7fc;text-decoration:none}h1{font-size:30px;line-height:1.2;margin-top:32px}p{color:#c4d3e0}label{display:block;margin-top:18px;font-weight:600}input,button{font:inherit;width:100%;min-height:48px;border-radius:10px;padding:12px}input{background:#17283a;color:white;border:1px solid #53677b}button{background:#c8f68a;color:#0b1424;border:0;font-weight:750;margin-top:24px;cursor:pointer}button:disabled{cursor:wait;opacity:.78}a{color:#c8f68a}.error{padding:12px;border:1px solid #bf745a;border-radius:10px;color:#ffd2be}.note{font-size:14px}.password-toggle{width:auto;min-height:40px;padding:7px 12px;margin:8px 0 0;background:#223950;color:#e3edf6;border:1px solid #53677b;font-weight:600}button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #89d1ff;outline-offset:3px}
+</style></head><body><main>
+<header><a href="/welcome"><img src="/static/brand/mark.svg" width="42" height="42" alt="">Auto Poster AI</a></header>
+<h1>{{'Create your Auto Poster AI account' if mode=='register' else 'Sign in to Auto Poster AI'}}</h1>
+<p>One account for your posts, Clip Studio, and saved business logo.</p>
+{% if mode=='register' %}<p>Choose your own email and password. Use the same account whenever you return; Clip Studio does not need another login.</p>{% else %}<p>Use the email and password you chose when you created your account.</p>{% endif %}
+{% if next_value=='clips' and mode=='register' %}<p class="note">Confirm your email before uploading a video. Your clips stay in your private workspace.</p>{% endif %}
+{% if error %}<p class="error" role="alert">{{error}}</p>{% endif %}
+{% if support_code %}<p class="note">Support code: {{support_code}} · {{support_reference}}</p>{% endif %}
+<form id="account-form" method="post" action="/account" data-account-mode="{{mode}}">
+<input type="hidden" name="_csrf" value="{{csrf}}"><input type="hidden" name="mode" value="{{mode}}"><input type="hidden" name="next" value="{{next_value}}">
+{% if mode=='register' %}<label for="name">Your name</label><input id="name" name="name" autocomplete="name" maxlength="80" required value="{{name}}">{% endif %}
+<label for="email">Email</label>{% if mode=='register' %}<p class="note">Use an email address you can open. You will need it to confirm your account before uploading video and to recover a forgotten password.</p>{% endif %}<input id="email" name="email" type="email" autocomplete="email" maxlength="254" required value="{{email}}">
+<label for="password">Password</label><input id="password" name="password" type="password" autocomplete="{{'new-password' if mode=='register' else 'current-password'}}" aria-describedby="password-hint" minlength="12" maxlength="256" required>
+<p class="note" id="password-hint">Use at least 12 characters. A few words together can be easier to remember.</p>
+<button class="password-toggle" type="button" id="show-password" aria-controls="password" aria-pressed="false">Show password</button>
+<button id="account-submit" type="submit">{{'Create account and continue' if mode=='register' else 'Sign in and continue'}}</button>
+<p class="note" id="account-status" role="status" aria-live="polite" aria-atomic="true"></p>
+</form>
+<p>{% if mode=='register' %}Already have an account? <a href="/account?mode=login{{'&next=' ~ next_value if next_value else ''}}">Sign in</a>{% else %}New here? <a href="/account?mode=register{{'&next=' ~ next_value if next_value else ''}}">Create an account</a>{% endif %}</p>
+<p><a href="/account/forgot">Forgot your password?</a></p>
+<p class="note">Creating an account does not purchase a subscription or start publishing. You decide what goes live.</p>
+<p class="note"><a href="/welcome">Back to Auto Poster AI</a> · <a href="/help">Get help</a></p>
+</main></body></html>

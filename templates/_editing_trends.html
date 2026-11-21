@@ -1,0 +1,15 @@
+<section class="studio-card" aria-labelledby="editing-inspiration-title" id="editing-inspiration">
+  <h2 id="editing-inspiration-title">Find an idea. Choose your look.</h2>
+  <p>See what is popular on YouTube for topic inspiration, then choose a caption treatment that suits your business.</p>
+  <div class="row"><label for="trend-region">Country<select id="trend-region"><option value="US">United States</option><option value="CA">Canada</option><option value="GB">United Kingdom</option><option value="AU">Australia</option><option value="IN">India</option></select></label><button type="button" class="secondary" id="trend-refresh">Check popular videos</button></div>
+  <p id="trend-status" role="status" aria-live="polite">Loading connection status…</p>
+  <p id="trend-updated" class="muted"></p><div id="trend-videos"></div>
+  <details><summary>What do these numbers tell me?</summary><p>The source is YouTube’s most-popular video chart for the chosen country. Counts are observations at the last update; they do not show which edit caused success or predict future reach. A short video is not necessarily a YouTube Short. This app does not download a video when you open one of these links.</p></details>
+  <h3>Pick a caption look</h3><p class="muted">These are curated choices supported by Clip Studio. They are separate from live popularity observations.</p>
+  <div id="editing-preset-options" class="actions">
+    <button type="button" class="secondary" data-editing-preset="standard">Clear and bold</button>
+    <button type="button" class="secondary" data-editing-preset="bar">A clear headline</button>
+    <button type="button" class="secondary" data-editing-preset="minimal">Keep it simple</button>
+  </div><p id="editing-preset-status" role="status" aria-live="polite"></p>
+</section>
+<script src="/static/editing-trends.js" defer></script>

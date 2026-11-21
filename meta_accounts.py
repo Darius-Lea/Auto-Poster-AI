@@ -1,0 +1,394 @@
+"""Authorized Facebook Business Page connections, not customer developer keys.
+
+Single-owner mobile starter integration with tenant-scoped storage primitives.
+The starter still requires production account identity and workspace ownership
+before public customers can be onboarded.
+"""
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+import os
+import re
+import secrets
+import sqlite3
+import time
+from urllib.parse import urlencode
+from sqlite_runtime import busy_timeout_ms
+from sqlite_concurrency import ClosingConnection
+
+import requests
+from cryptography.fernet import Fernet
+
+WORKSPACE = "owner"
+OAUTH_SCOPES = ("pages_show_list", "pages_read_engagement", "pages_manage_posts")
+PAGE_ID = re.compile(r"[0-9]{1,32}\Z")
+MAX_PAGES = 500
+PENDING_SECONDS = 600
+
+
+def _db():
+    wait_ms = busy_timeout_ms()
+    c = sqlite3.connect(os.getenv("AUTOPOST_WEB_DB", "autopost_web.db"), timeout=wait_ms / 1000,
+                       factory=ClosingConnection)
+    c.row_factory = sqlite3.Row
+    c.execute(f"PRAGMA busy_timeout={wait_ms}")
+    return c
+
+
+def _cipher():
+    key = os.getenv("META_PAGES_ENCRYPTION_SECRET", "")
+    if len(key) < 32:
+        raise RuntimeError("Set META_PAGES_ENCRYPTION_SECRET to a stable 32+ character secret")
+    # Derive a valid Fernet key without exposing it. Do not rotate the secret
+    # without first re-encrypting stored Page tokens.
+    return Fernet(base64.urlsafe_b64encode(hashlib.sha256(key.encode()).digest()))
+
+
+def oauth_config():
+    app_id = os.getenv("META_APP_ID", "").strip()
+    app_secret = os.getenv("META_APP_SECRET", "")
+    redirect_uri = os.getenv("META_OAUTH_REDIRECT_URI", "")
+    if not app_id or not app_secret or not redirect_uri.startswith("https://"):
+        raise RuntimeError("Configure META_APP_ID, META_APP_SECRET and HTTPS META_OAUTH_REDIRECT_URI")
+    _cipher()
+    return {"id": app_id, "secret": app_secret, "redirect_uri": redirect_uri,
+            "version": os.getenv("META_GRAPH_VERSION", "v26.0")}
+
+
+def configured():
+    try:
+        oauth_config()
+        return True
+    except RuntimeError:
+        return False
+
+
+def init():
+    with _db() as c:
+        c.executescript("""
+        CREATE TABLE IF NOT EXISTS connected_facebook_pages (
+          workspace_id TEXT NOT NULL,
+          page_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          tasks_json TEXT NOT NULL,
+          encrypted_access_token TEXT NOT NULL,
+          connected_at INTEGER NOT NULL,
+          PRIMARY KEY(workspace_id, page_id)
+        );
+        CREATE TABLE IF NOT EXISTS pending_facebook_pages (
+          workspace_id TEXT NOT NULL,
+          page_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          tasks_json TEXT NOT NULL,
+          encrypted_access_token TEXT NOT NULL,
+          expires_at INTEGER NOT NULL,
+          PRIMARY KEY(workspace_id, page_id)
+        );
+        """)
+
+
+def login_url(state: str):
+    cfg = oauth_config()
+    if not isinstance(state, str) or len(state) < 32:
+        raise ValueError("Invalid OAuth state")
+    params = {
+        "client_id": cfg["id"],
+        "redirect_uri": cfg["redirect_uri"],
+        "response_type": "code",
+        "state": state,
+    }
+    business_config = os.getenv("META_FACEBOOK_LOGIN_CONFIG_ID", "").strip()
+    if business_config:
+        params["config_id"] = business_config
+    else:
+        params["scope"] = ",".join(OAUTH_SCOPES)
+        params["auth_type"] = "rerequest"
+    return "https://www.facebook.com/" + cfg["version"] + "/dialog/oauth?" + urlencode(params)
+
+
+def _get_json(url, *, params=None, token=None):
+    headers = {"Authorization": "Bearer " + token} if token else {}
+    try:
+        response = requests.get(url, params=params, headers=headers,
+                                timeout=(10, 30), allow_redirects=False)
+        response.raise_for_status()
+        payload = response.json()
+    except (requests.RequestException, ValueError) as exc:
+        # Do not expose Meta auth codes, access tokens or URLs in error messages.
+        raise RuntimeError("Meta authorization failed; please reconnect and try again") from None
+    if not isinstance(payload, dict):
+        raise RuntimeError("Unexpected response from Meta")
+    return payload
+
+
+def discover_pages(auth_code: str):
+    """Exchange one-time code, then list Page tokens and permissions server-side."""
+    cfg = oauth_config()
+    if not auth_code or len(auth_code) > 8192:
+        raise ValueError("Invalid authorization code")
+    base = "https://graph.facebook.com/" + cfg["version"]
+    payload = _get_json(
+        base + "/oauth/access_token",
+        params={"client_id": cfg["id"], "client_secret": cfg["secret"],
+                "redirect_uri": cfg["redirect_uri"], "code": auth_code},
+    )
+    user_token = payload.get("access_token")
+    if not isinstance(user_token, str) or not user_token:
+        raise RuntimeError("Meta did not return a user authorization token")
+    long_lived = _get_json(
+        base + "/oauth/access_token",
+        params={"grant_type": "fb_exchange_token",
+                "client_id": cfg["id"], "client_secret": cfg["secret"],
+                "fb_exchange_token": user_token},
+    )
+    token = long_lived.get("access_token")
+    if not isinstance(token, str) or not token:
+        raise RuntimeError("Meta did not return an extended authorization token")
+    pages = []
+    after = None
+    seen_cursors = set()
+    for _ in range(15):
+        params = {"fields": "id,name,tasks,access_token", "limit": 100}
+        if after:
+            params["after"] = after
+        data = _get_json(base + "/me/accounts", params=params, token=token)
+        batch = data.get("data", [])
+        if not isinstance(batch, list):
+            raise RuntimeError("Meta returned an invalid Page list")
+        for row in batch:
+            if not isinstance(row, dict):
+                continue
+            pid, name, page_token = row.get("id"), row.get("name"), row.get("access_token")
+            if not isinstance(pid, str) or not PAGE_ID.fullmatch(pid):
+                continue
+            if not isinstance(page_token, str) or not page_token:
+                continue
+            if not isinstance(name, str) or not name:
+                continue
+            tasks = row.get("tasks", [])
+            if not isinstance(tasks, list):
+                tasks = []
+            tasks = [t for t in tasks if isinstance(t, str)][:30]
+            pages.append({"page_id": pid, "name": name[:160], "token": page_token,
+                          "tasks": tasks, "can_publish": "CREATE_CONTENT" in tasks})
+            if len(pages) > MAX_PAGES:
+                raise RuntimeError("Too many Pages to process; contact support")
+        cursor = data.get("paging", {}).get("cursors", {}).get("after")
+        if not isinstance(cursor, str) or not cursor or cursor in seen_cursors:
+            break
+        if not data.get("paging", {}).get("next"):
+            break
+        seen_cursors.add(cursor)
+        after = cursor
+    else:
+        raise RuntimeError("Unable to complete Facebook Page discovery")
+    return pages
+
+
+def remember_pending(workspace_id: str, pages: list, now=None):
+    """Store Page choices briefly, encrypted, never in cookies or localStorage."""
+    if not workspace_id or len(workspace_id) > 128:
+        raise ValueError("Missing workspace")
+    now = int(time.time()) if now is None else int(now)
+    cipher = _cipher()
+    with _db() as conn:
+        conn.execute("DELETE FROM pending_facebook_pages WHERE workspace_id=?",
+                     (workspace_id,))
+        for p in pages:
+            if not PAGE_ID.fullmatch(p["page_id"]) or not p.get("token"):
+                raise ValueError("Invalid Facebook Page")
+            conn.execute("""
+                INSERT INTO pending_facebook_pages
+                (workspace_id,page_id,name,tasks_json,encrypted_access_token,expires_at)
+                VALUES(?,?,?,?,?,?)
+            """, (workspace_id, p["page_id"], p["name"],
+                  json.dumps(p["tasks"]), cipher.encrypt(p["token"].encode()).decode(),
+                  now + PENDING_SECONDS))
+
+
+def pending_choices(workspace_id: str, now=None):
+    now = int(time.time()) if now is None else int(now)
+    with _db() as c:
+        rows = c.execute("""
+            SELECT page_id,name,tasks_json FROM pending_facebook_pages
+            WHERE workspace_id=? AND expires_at>? ORDER BY name
+        """, (workspace_id, now)).fetchall()
+    return [{"page_id": r["page_id"], "name": r["name"],
+             "can_publish": "CREATE_CONTENT" in json.loads(r["tasks_json"])}
+            for r in rows]
+
+
+def activate_pages(workspace_id: str, page_ids: list[str], now=None):
+    now = int(time.time()) if now is None else int(now)
+    unique = list(dict.fromkeys(page_ids))
+    if not unique or len(unique) > MAX_PAGES or any(
+        not isinstance(x, str) or not PAGE_ID.fullmatch(x) for x in unique
+    ):
+        raise ValueError("Choose one or more valid Pages")
+    with _db() as c:
+        rows = c.execute("""
+            SELECT * FROM pending_facebook_pages
+            WHERE workspace_id=? AND expires_at>?
+        """, (workspace_id, now)).fetchall()
+        candidates = {r["page_id"]: r for r in rows}
+        if any(x not in candidates or
+               "CREATE_CONTENT" not in json.loads(candidates[x]["tasks_json"])
+               for x in unique):
+            raise PermissionError("One or more selected Pages lack publishing permission")
+        for page_id in unique:
+            p = candidates[page_id]
+            c.execute("""
+                INSERT INTO connected_facebook_pages
+                (workspace_id,page_id,name,tasks_json,encrypted_access_token,connected_at)
+                VALUES(?,?,?,?,?,?)
+                ON CONFLICT(workspace_id,page_id) DO UPDATE SET
+                  name=excluded.name,tasks_json=excluded.tasks_json,
+                  encrypted_access_token=excluded.encrypted_access_token,
+                  connected_at=excluded.connected_at
+            """, (workspace_id, p["page_id"], p["name"], p["tasks_json"],
+                  p["encrypted_access_token"], now))
+        c.execute("DELETE FROM pending_facebook_pages WHERE workspace_id=?", (workspace_id,))
+    return len(unique)
+
+
+def list_pages(workspace_id: str):
+    with _db() as c:
+        rows = c.execute("""
+            SELECT page_id,name,tasks_json,connected_at
+            FROM connected_facebook_pages WHERE workspace_id=?
+            ORDER BY name
+        """, (workspace_id,)).fetchall()
+    return [{"page_id": r["page_id"], "name": r["name"],
+             "can_publish": "CREATE_CONTENT" in json.loads(r["tasks_json"]),
+             "connected_at": r["connected_at"]} for r in rows]
+
+
+def get_page_token(workspace_id: str, page_id: str):
+    if not isinstance(page_id, str) or not PAGE_ID.fullmatch(page_id):
+        raise PermissionError("Invalid Page selection")
+    with _db() as c:
+        row = c.execute("""
+            SELECT encrypted_access_token,tasks_json FROM connected_facebook_pages
+            WHERE workspace_id=? AND page_id=?
+        """, (workspace_id, page_id)).fetchone()
+    if not row or "CREATE_CONTENT" not in json.loads(row["tasks_json"]):
+        raise PermissionError("Selected Page is not connected or lacks posting permission")
+    return _cipher().decrypt(row["encrypted_access_token"].encode()).decode()
+
+
+def disconnect(workspace_id: str, page_id: str):
+    if not isinstance(page_id, str) or not PAGE_ID.fullmatch(page_id):
+        raise ValueError("Invalid Page")
+    with _db() as c:
+        result = c.execute(
+            "DELETE FROM connected_facebook_pages WHERE workspace_id=? AND page_id=?",
+            (workspace_id, page_id),
+        )
+    return result.rowcount == 1
+
+
+def publish_message(workspace_id: str, page_id: str, message: str):
+    import app_control
+    from core.facebook import FacebookClient
+    if not app_control.allowed(workspace_id=workspace_id):
+        raise PermissionError("Subscription required before Facebook publishing")
+    token = get_page_token(workspace_id, page_id)
+    return "meta:" + FacebookClient(page_id, token,
+                  os.getenv("META_GRAPH_VERSION", "v26.0")).publish_message(message)
+
+
+def _video_version():
+    version = os.getenv('META_GRAPH_VERSION', 'v26.0')
+    if not re.fullmatch(r'v[1-9][0-9]?\.[0-9]+', version):
+        raise RuntimeError('The service operator must configure a valid Meta API version.')
+    return version
+
+
+class _VideoMultipart:
+    """Bounded multipart iterator: do not buffer a complete video in memory."""
+    def __init__(self, handle, size, description):
+        self.handle = handle
+        self.boundary = 'autoposter' + secrets.token_hex(16)
+        self.header = (
+            '--' + self.boundary + '\r\nContent-Disposition: form-data; name="description"\r\n\r\n'
+            + description + '\r\n--' + self.boundary
+            + '\r\nContent-Disposition: form-data; name="published"\r\n\r\ntrue\r\n--'
+            + self.boundary + '\r\nContent-Disposition: form-data; name="source"; filename="clip.mp4"'
+            + '\r\nContent-Type: video/mp4\r\n\r\n').encode('utf-8')
+        self.footer = ('\r\n--' + self.boundary + '--\r\n').encode('ascii')
+        self.length = len(self.header) + size + len(self.footer)
+
+    def __len__(self):
+        return self.length
+
+    def __iter__(self):
+        yield self.header
+        while chunk := self.handle.read(256 * 1024):
+            yield chunk
+        yield self.footer
+
+
+def publish_video(workspace_id: str, page_id: str, path, description: str):
+    """Upload one reviewed Page video; an ID means accepted, not published.
+
+    The caller owns idempotency and must never automatically retry an uncertain
+    POST. Status is confirmed separately with get_video_status(). This uses the
+    official Page /videos source/description/published fields and a scoped Page
+    token. It never falls back to the legacy owner's environment credentials.
+    """
+    import app_control
+    from pathlib import Path
+    if os.getenv('AUTOPOST_PREVIEW_MODE', 'false').lower() == 'true':
+        raise PermissionError('Video publishing stays off in preview mode.')
+    if not app_control.allowed(workspace_id=workspace_id) or app_control.publishing_paused(workspace_id):
+        raise PermissionError('Publishing is paused or your subscription is not active.')
+    if not isinstance(description, str) or len(description) > 10000:
+        raise ValueError('Keep the video caption under 10,000 characters.')
+    source = Path(path)
+    if not source.is_file() or source.is_symlink() or not 0 < source.stat().st_size <= 200 * 1024 * 1024:
+        raise ValueError('Choose a finished, nonempty clip under 200 MB.')
+    token = get_page_token(workspace_id, page_id)
+    url = 'https://graph-video.facebook.com/' + _video_version() + '/' + page_id + '/videos'
+    try:
+        with source.open('rb') as handle:
+            body = _VideoMultipart(handle, source.stat().st_size, description)
+            response = requests.post(url, data=body, headers={
+                'Authorization': 'Bearer ' + token,
+                'Content-Type': 'multipart/form-data; boundary=' + body.boundary,
+            }, timeout=(10, 120), allow_redirects=False)
+        if response.status_code != 200:
+            raise RuntimeError('Facebook did not confirm the video upload. Check your Page before trying another upload.')
+        payload = response.json()
+        identifier = payload.get('id') if isinstance(payload, dict) else None
+        if not isinstance(identifier, str) or not PAGE_ID.fullmatch(identifier):
+            raise RuntimeError('Facebook did not return a valid video reference. Check your Page before trying another upload.')
+        return identifier
+    except (requests.RequestException, ValueError, OSError):
+        # Exception strings/response bodies may contain credentials or paths.
+        raise RuntimeError('Facebook did not confirm the video upload. Check your Page before trying another upload.') from None
+
+
+def get_video_status(workspace_id: str, page_id: str, video_id: str):
+    """Read-only confirmation using the same workspace's Page authorization."""
+    if not isinstance(video_id, str) or not PAGE_ID.fullmatch(video_id):
+        raise ValueError('Choose a valid video reference.')
+    token = get_page_token(workspace_id, page_id)
+    data = _get_json('https://graph.facebook.com/' + _video_version() + '/' + video_id,
+                     params={'fields': 'id,status,published,permalink_url'}, token=token)
+    if data.get('id') != video_id or not isinstance(data.get('status'), dict):
+        raise RuntimeError('Facebook has not returned a usable video status. Check the Page.')
+    phase = data['status'].get('video_status')
+    failed = phase in ('error', 'failed')
+    for key in ('processing_phase', 'publishing_phase', 'uploading_phase'):
+        detail = data['status'].get(key)
+        if isinstance(detail, dict) and detail.get('status') in ('error', 'failed'):
+            failed = True
+    published = phase == 'ready' and data.get('published') is True
+    # A provider permalink is optional and never used for a server request.
+    permalink = data.get('permalink_url')
+    if not isinstance(permalink, str) or not permalink.startswith('https://www.facebook.com/'):
+        permalink = None
+    return {'id': video_id, 'published': published, 'failed': failed,
+            'processing': not published and not failed, 'permalink_url': permalink}
