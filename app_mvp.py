@@ -30,6 +30,7 @@ import customer_accounts
 import plan_limits
 from storage_health import classify_storage_error
 from sqlite_concurrency import ClosingConnection, prepare_wal
+from sqlite_runtime import busy_timeout_ms
 
 load_dotenv()
 app = Flask(__name__)
@@ -60,8 +61,14 @@ def preview_mode() -> bool:
 
 
 def db():
-    connection = sqlite3.connect(DATABASE, timeout=2, factory=ClosingConnection)
+    # Background work (the scheduler runs outside a request context) waits up
+    # to 15 seconds for a held write lock, like the other background modules.
+    # Request handlers keep the short 2-second wait. A 2-second scheduler
+    # wait turned any brief lock into a failed pass.
+    wait_ms = busy_timeout_ms()
+    connection = sqlite3.connect(DATABASE, timeout=wait_ms / 1000, factory=ClosingConnection)
     connection.row_factory = sqlite3.Row
+    connection.execute(f"PRAGMA busy_timeout={wait_ms}")
     return connection
 
 
@@ -137,6 +144,22 @@ def _database_key():
     return (os.getpid(), str(Path(DATABASE).resolve()))
 
 
+def _schema_present():
+    """True when the account schema already exists (read-only check).
+
+    Reads work in WAL mode even while another connection holds the write
+    lock, so this can answer without demanding a write lock of its own.
+    """
+    try:
+        with db() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='customer_accounts'"
+            ).fetchone()
+            return row is not None
+    except sqlite3.Error:
+        return False
+
+
 def ensure_database_ready():
     """Support direct WSGI imports as well as the scheduler entry point.
 
@@ -153,11 +176,26 @@ def ensure_database_ready():
     try:
         if key in _INITIALIZED_DATABASES:
             return
-        # Fail promptly if an existing database is currently write-locked,
-        # rather than waiting through each module's migration timeout.
-        with db() as connection:
-            connection.execute('BEGIN IMMEDIATE')
-            connection.rollback()
+        # A held write lock must not brick the app when the schema already
+        # exists: retry the probe briefly, then fall back to the read check.
+        # Only a genuinely missing schema needs a writable database here.
+        last_error = None
+        for delay in (0, 1, 3):
+            if delay:
+                time.sleep(delay)
+            try:
+                with db() as connection:
+                    connection.execute('BEGIN IMMEDIATE')
+                    connection.rollback()
+                break
+            except sqlite3.OperationalError as exc:
+                last_error = exc
+        else:
+            if _schema_present():
+                _INITIALIZED_DATABASES.add(key)
+                return
+            raise customer_accounts.AuthStorageUnavailable(
+                'Account access is temporarily unavailable. Please try again in a moment.', retryable=True) from last_error
         init_db()
     finally:
         _BOOTSTRAP_LOCK.release()

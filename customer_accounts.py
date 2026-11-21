@@ -53,11 +53,35 @@ def _public_user(row):
     return user
 
 
+def _retry_busy(operation):
+    """Run a short account write, retrying a held database lock briefly.
+
+    In WAL mode a single stuck writer blocks every other writer, so a first
+    'database is locked' is worth a couple of short waits before failing.
+    Only lock errors are retried; anything else raises immediately.
+    """
+    last_error = None
+    for delay in (0, 1, 3):
+        if delay:
+            time.sleep(delay)
+        try:
+            return operation()
+        except sqlite3.OperationalError as exc:
+            detail = str(exc).lower()
+            if 'database is locked' not in detail and 'database table is locked' not in detail:
+                raise
+            last_error = exc
+    raise last_error
+
+
 def connect():
-    # Do not leave an account form spinning for the old 15-second write wait.
-    c = sqlite3.connect(os.getenv('AUTOPOST_WEB_DB', 'autopost_web.db'), timeout=2,
+    # Account creation must survive a briefly held write lock: wait up to
+    # 15 seconds (the bound the background modules already use) instead of
+    # failing the form after 2 seconds.
+    c = sqlite3.connect(os.getenv('AUTOPOST_WEB_DB', 'autopost_web.db'), timeout=15,
                        factory=ClosingConnection)
     c.row_factory = sqlite3.Row
+    c.execute("PRAGMA busy_timeout=15000")
     return c
 
 
@@ -82,13 +106,15 @@ def init():
 def attempt(action, identity, limit=12, window=300, now=None):
     now = int(time.time()) if now is None else now
     key = hashlib.sha256((action+':'+identity).encode()).hexdigest()
-    with connect() as c:
-        c.execute('DELETE FROM customer_auth_limits WHERE until_at<=?', (now,))
-        c.execute('BEGIN IMMEDIATE') if not c.in_transaction else None
-        row = c.execute('SELECT count FROM customer_auth_limits WHERE key=?', (key,)).fetchone()
-        if row and row['count'] >= limit:
-            raise PermissionError('Too many attempts. Wait a few minutes before trying again.')
-        c.execute('INSERT INTO customer_auth_limits VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=count+1', (key,now+window))
+    def _record():
+        with connect() as c:
+            c.execute('DELETE FROM customer_auth_limits WHERE until_at<=?', (now,))
+            c.execute('BEGIN IMMEDIATE') if not c.in_transaction else None
+            row = c.execute('SELECT count FROM customer_auth_limits WHERE key=?', (key,)).fetchone()
+            if row and row['count'] >= limit:
+                raise PermissionError('Too many attempts. Wait a few minutes before trying again.')
+            c.execute('INSERT INTO customer_auth_limits VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=count+1', (key,now+window))
+    _retry_busy(_record)
 
 
 @_storage_errors
@@ -112,13 +138,15 @@ def register(email, password, name=''):
         app_control.init()
     user_id=secrets.token_hex(16); workspace_id='ws_'+secrets.token_hex(16)
     created=int(time.time())
-    with connect() as c:
-        try:
-            c.execute('BEGIN IMMEDIATE')
-            c.execute('INSERT INTO customer_accounts(id,workspace_id,email,name,password_hash,created_at) VALUES(?,?,?,?,?,?)', (user_id,workspace_id,email.strip().lower(),name.strip(),password_hash,created))
-            c.execute('INSERT INTO publishing_controls(workspace_id) VALUES(?)',(workspace_id,))
-        except sqlite3.IntegrityError:
-            raise ValueError('Unable to create that account. Try signing in instead.') from None
+    def _insert():
+        with connect() as c:
+            try:
+                c.execute('BEGIN IMMEDIATE')
+                c.execute('INSERT INTO customer_accounts(id,workspace_id,email,name,password_hash,created_at) VALUES(?,?,?,?,?,?)', (user_id,workspace_id,email.strip().lower(),name.strip(),password_hash,created))
+                c.execute('INSERT INTO publishing_controls(workspace_id) VALUES(?)',(workspace_id,))
+            except sqlite3.IntegrityError:
+                raise ValueError('Unable to create that account. Try signing in instead.') from None
+    _retry_busy(_insert)
     # Nothing after this commit can turn a successfully created account into a
     # reported failure. In particular, do not run schema work or a second read.
     return {'id':user_id,'workspace_id':workspace_id,'email':email.strip().lower(),
